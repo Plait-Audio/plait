@@ -8,6 +8,53 @@ Users purchase through a website, receive a license key and receipt by email, an
 
 ---
 
+## Token Budget & Agent Instructions
+
+**This project is built on a limited Cursor budget. Every agent invoked on this plan MUST follow these rules to minimize wasted tokens:**
+
+### Model selection rules
+
+| Use this tier | When |
+|---------------|------|
+| **Auto / fast** | Boilerplate, scaffolding, file copies, CMake plumbing, `.gitignore`, `setup.sh`, mechanical refactors where the pattern is already shown in this doc. |
+| **Sonnet 4.6** | Implementation work with clear specs: porting LARS code, MIDI export, UI wiring, threading, server API, website. The spec in this doc is detailed enough that Sonnet can execute without exploration. |
+| **Opus 4.6** | Only for genuinely hard algorithmic work: onset detection tuning, edge-case robustness, and security-sensitive licensing logic. **Do not use Opus for anything that has a clear spec or pattern to follow.** |
+
+### Token-saving practices for all agents
+
+1. **Read this plan first, not the codebase.** This doc contains the APIs, algorithms, file layout, and known issues. Only read source files when this doc is insufficient.
+2. **Write code in large, complete blocks.** Prefer one 200-line file write over 10 small edits. Each tool call costs tokens for context re-serialization.
+3. **Don't re-read files you've already read this session.** Cache what you need in your working memory.
+4. **Don't explore speculatively.** If the plan says "port `Utils.cpp`," read `Utils.cpp` once, write the new file, and move on. Don't grep the codebase for related patterns.
+5. **Batch independent work.** If Phase 0 has 5 independent file-creation tasks, do them all in one turn with parallel tool calls.
+6. **Don't re-read this plan file between turns.** It's long (~700 lines). Read it once at the start of a session, then work from memory.
+7. **Fail fast.** If a build fails, read the error, fix it, and rebuild. Don't add speculative fixes for errors you haven't seen.
+8. **Skip verbose commit messages and explanations.** The user values working code over narration. Keep responses short.
+
+### Budget breakdown (estimated)
+
+| Phase | Tier | Est. tokens | Est. on-demand cost |
+|-------|------|------------|-------------------|
+| 0 Scaffold | Auto | ~55k | $0.05 |
+| 1 Separation port | Sonnet | ~250k | $2.50 |
+| 2 Onset detection | **Opus** | ~185k | **$8.50** |
+| 3 MIDI export | Sonnet | ~125k | $1.50 |
+| 4 UI | Sonnet + Auto | ~310k | $3.50 |
+| 5 Threading | Sonnet | ~125k | $1.50 |
+| 6 LibTorch bundling | Auto | ~35k | $0.05 |
+| 7 Polish | Opus + Auto | ~145k | **$5.50** |
+| 8 Licensing | Opus + Sonnet | ~245k | **$8.00** |
+| 9 Website | Sonnet + Auto | ~130k | $1.50 |
+| Debug overhead (~40%) | mixed | ~330k | $5.00 |
+| **Total** | | **~2.3M** | **~$38** |
+
+**The biggest cost driver is Opus output tokens.** To stay under budget:
+- Use Sonnet for the first pass of Phase 2 (onset detection). Escalate to Opus only for tuning the adaptive threshold and edge cases.
+- Use Sonnet for Phase 8 licensing client code. Escalate to Opus only for the cryptographic signing / anti-tamper logic.
+- Never use Opus for UI, MIDI file I/O, CMake, or website work.
+
+---
+
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
@@ -206,7 +253,9 @@ private:
 
 ## 5. Phase 2 — Onset Detection (DSP)
 
-> **Agent tier: Opus 4.6** (core algorithmic work — must be robust and well-tuned)
+> **Agent tier: Start with Sonnet 4.6 for initial implementation. Escalate to Opus 4.6 ONLY for adaptive threshold tuning and edge-case robustness.**
+>
+> **Budget note:** This phase is the largest Opus cost driver. The algorithm is fully specified below — Sonnet can implement it from this spec. Use Opus only if Sonnet's initial detector produces poor results on real audio (double triggers, missed ghost notes, bad velocity curves).
 
 This is the hardest part of the project. The separated stems are already quite clean per-instrument, so a **classical DSP approach** (envelope follower + peak picking) is the right call — no need for a second ML model.
 
@@ -327,7 +376,7 @@ public:
 
 ## 7. Phase 4 — UI
 
-> **Agent tier: Sonnet 4.6** (UI layout) + **Auto** (boilerplate wiring)
+> **Agent tier: Sonnet 4.6** (UI layout) + **Auto** (boilerplate wiring). **Never Opus for UI work.**
 
 ### Layout concept
 
@@ -422,7 +471,9 @@ User clicks "Separate"
 
 ## 9. Phase 6 — LibTorch Bundling & Packaging
 
-> **Agent tier: Auto** (copy from LARS build)
+> **Agent tier: Auto** (copy from LARS build, zero creative work)
+>
+> **Budget note:** This phase should cost near-zero. The script and CMake block exist verbatim in the LARS repo. Copy, adjust target names, done.
 
 Identical to the LARS build. Copy:
 
@@ -442,7 +493,7 @@ Create `dist/ISO-Drums-macOS-arm64.zip` containing:
 
 ## 10. Phase 7 — Polish & Edge Cases
 
-> **Agent tier: Opus 4.6** (nuanced correctness) + **Auto** (mechanical fixes)
+> **Agent tier: Sonnet 4.6 for the first pass. Opus 4.6 only for audio edge cases that Sonnet can't resolve (sample rate resampling correctness, STFT padding crashes). Auto for mechanical fixes.**
 
 ### Audio edge cases
 
@@ -469,7 +520,9 @@ Create `dist/ISO-Drums-macOS-arm64.zip` containing:
 
 ## 11. Phase 8 — Licensing & Trial System
 
-> **Agent tier: Opus 4.6** (security-sensitive; must be robust against casual bypass) + **Sonnet 4.6** (server-side API)
+> **Agent tier: Sonnet 4.6 for the full implementation. Opus 4.6 ONLY for the cryptographic signing / HMAC anti-tamper logic (a single focused task, ~1–2 turns).**
+>
+> **Budget note:** The licensing system is "keep honest people honest" — not DRM. Sonnet can write the `LicenseManager`, server API, and machine fingerprinting. Only escalate to Opus for the state-file signing where getting the crypto wrong would mean a trivially bypassable trial. That one Opus task should be tightly scoped: "Given this state struct, produce a signed blob using HMAC-SHA256 and a hardcoded key, and a verify function."
 
 ### Business rules
 
@@ -559,7 +612,7 @@ A minimal REST API — can be a simple serverless function (Cloudflare Workers, 
 
 ## 12. Phase 9 — Website, Store & Distribution
 
-> **Agent tier: Sonnet 4.6** (website) + **Auto** (boilerplate) + manual setup for payment provider
+> **Agent tier: Sonnet 4.6** (website) + **Auto** (boilerplate) + manual setup for payment provider. **Never Opus for web work.**
 
 ### Website
 
