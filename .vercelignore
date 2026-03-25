@@ -1,0 +1,14 @@
+# C++ source and build artifacts — not needed for web deployment
+src/
+Resources/
+build/
+dist/
+third_party/
+scripts/
+
+# Repo docs
+_ISO-Drums-Plan.md
+INSTALL.txt
+
+# Public asset originals — web/ already has the copies it needs
+public/
