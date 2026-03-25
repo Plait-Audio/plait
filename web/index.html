@@ -41,7 +41,7 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; overflow-x: hidden; }
 
   body {
     background: var(--bg-deep);
@@ -50,6 +50,7 @@
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    min-width: 0;
   }
 
   /* ── NAV ─────────────────────────────────────────────────── */
@@ -272,6 +273,7 @@
   .waveform-hero {
     width: 100%;
     max-width: 680px;
+    min-width: 0;
     opacity: 0;
     animation: fadeUp 0.7s ease forwards 1.2s;
     position: relative;
@@ -285,6 +287,7 @@
     position: relative;
     overflow: hidden;
     backdrop-filter: blur(20px);
+    min-width: 0;
   }
   .waveform-hero-container::before {
     content: '';
@@ -585,10 +588,12 @@
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    width: 650px; height: 650px;
+    width: min(650px, 100vw);
+    height: min(650px, 100vw);
     background: radial-gradient(circle, var(--accent-dim) 0%, transparent 65%);
     filter: blur(80px);
     pointer-events: none;
+    overflow: hidden;
   }
   .pricing-card {
     max-width: 460px;
@@ -848,31 +853,55 @@
 
   /* ── RESPONSIVE ───────────────────────────────────────────── */
   @media (max-width: 768px) {
+    /* Nav */
     nav { padding: 14px 20px; }
     .nav-links a:not(.nav-cta) { display: none; }
+
+    /* Hero */
     .hero { padding: 110px 20px 60px; }
     .hero h1 { letter-spacing: -2px; }
-    .hero-sub { font-size: 16px; }
+    .hero-sub { font-size: 16px; max-width: 100%; }
     .hero-actions { flex-direction: column; width: 100%; }
     .hero-actions .btn-primary,
     .hero-actions .btn-ghost { width: 100%; justify-content: center; }
-    .waveform-hero { margin: 0 -4px; }
-    .waveform-hero-container { padding: 18px 16px; border-radius: 12px; }
+    .hero-note { padding: 0 8px; text-align: center; }
+
+    /* Waveform widget */
+    .waveform-hero { width: 100%; margin: 0; min-width: 0; }
+    .waveform-hero-container { padding: 18px 16px; border-radius: 12px; overflow: hidden; }
+    .waveform-hero-header .right { display: none; }
+    .track-bars { overflow: hidden; }
     .track-controls { display: none; }
-    .steps-grid,
-    .specs-grid,
-    .stem-strip,
-    .features-grid { grid-template-columns: 1fr; }
-    .stem-strip { grid-template-columns: 1fr 1fr; }
+
+    /* Section padding */
     .how-section,
     .features-section,
     .stem-section,
     .specs-section,
     .about-section { padding: 72px 20px; }
+
+    /* Grids → single column */
+    .steps-grid,
+    .specs-grid,
+    .features-grid { grid-template-columns: 1fr; }
+
+    /* Stems → 2 col on mobile */
+    .stem-strip { grid-template-columns: 1fr 1fr; }
+
+    /* About */
     .about-grid { grid-template-columns: 1fr; gap: 44px; }
+
+    /* Beta / pricing card */
     .pricing-section { padding: 72px 20px; }
-    .pricing-card { padding: 36px 28px; }
-    footer { flex-direction: column; gap: 22px; text-align: center; }
+    .pricing-card { padding: 36px 20px; }
+    .pricing-amount { font-size: 48px; }
+
+    /* Belief */
+    .belief-banner { padding: 72px 20px; }
+
+    /* Footer */
+    footer { flex-direction: column; gap: 22px; text-align: center; padding: 32px 20px; }
+    .footer-links { flex-wrap: wrap; justify-content: center; gap: 16px; }
   }
 </style>
 </head>
