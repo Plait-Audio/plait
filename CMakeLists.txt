@@ -20,7 +20,8 @@ juce_add_plugin(ISODrums
     PLUGIN_MANUFACTURER_CODE Isod
     PLUGIN_CODE Isod
     FORMATS AU VST3 Standalone
-    PRODUCT_NAME "ISO Drums")
+    PRODUCT_NAME "ISO Drums"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ISO-Drums-Avatar.png")
 
 juce_generate_juce_header(ISODrums)
 
