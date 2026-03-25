@@ -353,24 +353,34 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
     // ── Header separator ──────────────────────────────────────────────────────
     g.fillRect(juce::Rectangle<int>(0, 50, getWidth(), 1));
 
-    // ── Logo mark: filled circle (ISO Drums identity) ─────────────────────────
+    // ── ISO Drums horizontal logo (embedded PNG) ──────────────────────────────
     {
-        const float cx = 20.f, cy = 25.f, r = 5.f;
-        g.setColour(kText);
-        g.fillEllipse(cx - r, cy - r, r * 2.f, r * 2.f);
+        static const juce::Image logoImg = juce::ImageCache::getFromMemory(
+            BinaryData::logoisodrumshorizwhite_png,
+            BinaryData::logoisodrumshorizwhite_pngSize);
+
+        if (logoImg.isValid())
+        {
+            // Draw at fixed height of 22px, width proportional
+            const float logoH = 22.f;
+            const float logoW = logoH * (float)logoImg.getWidth() / (float)logoImg.getHeight();
+            const float logoX = 14.f;
+            const float logoY = (50.f - logoH) * 0.5f;
+            g.setOpacity(0.92f);
+            g.drawImage(logoImg,
+                        (int)logoX, (int)logoY, (int)logoW, (int)logoH,
+                        0, 0, logoImg.getWidth(), logoImg.getHeight());
+            g.setOpacity(1.0f);
+        }
+        else
+        {
+            // Fallback: hand-drawn mark if image didn't load
+            g.setColour(kText);
+            g.setFont(ISOLookAndFeel::font(14.f, true));
+            g.drawText("ISO DRUMS", juce::Rectangle<int>(14, 0, 160, 50),
+                       juce::Justification::centredLeft);
+        }
     }
-
-    // ── Wordmark ──────────────────────────────────────────────────────────────
-    g.setColour(kText);
-    g.setFont(ISOLookAndFeel::font(14.f, true));
-    g.drawText("ISO DRUMS", juce::Rectangle<int>(32, 6, 130, 22),
-               juce::Justification::centredLeft);
-
-    // ── Parent brand ──────────────────────────────────────────────────────────
-    g.setColour(kMuted);
-    g.setFont(ISOLookAndFeel::font(8.5f));
-    g.drawText("by Plait", juce::Rectangle<int>(33, 28, 80, 14),
-               juce::Justification::centredLeft);
 
     // ── License status chip ───────────────────────────────────────────────────
     auto& lm = audioProcessor_.getLicenseManager();
@@ -405,7 +415,7 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
         const float textW = g.getCurrentFont().getStringWidthFloat(licText);
         const float chipW = textW + 28.0f;
         const float chipH = 20.0f;
-        const float chipX = 182.0f;
+        const float chipX = 200.0f;
         const float chipY = (50.0f - chipH) * 0.5f;
 
         juce::Rectangle<float> chip(chipX, chipY, chipW, chipH);
