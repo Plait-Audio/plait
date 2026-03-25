@@ -13,8 +13,8 @@ static const uint8_t kAppSecret[32] = {
     0x7e, 0x38, 0xc5, 0x82, 0x61, 0x0b, 0xd4, 0xf7
 };
 
-static constexpr const char* kActivateUrl   = "https://api.isodrums.com/api/activate";
-static constexpr const char* kDeactivateUrl = "https://api.isodrums.com/api/deactivate";
+static constexpr const char* kActivateUrl   = "https://plaitaudio.com/api/activate";
+static constexpr const char* kDeactivateUrl = "https://plaitaudio.com/api/deactivate";
 
 // --------------------------------------------------------------------------
 // Constructor

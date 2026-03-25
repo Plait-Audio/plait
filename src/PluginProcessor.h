@@ -72,6 +72,9 @@ public:
     // Pointer to whichever transport is currently playing (nullptr = silence)
     std::atomic<juce::AudioTransportSource*> activeTransport { nullptr };
 
+    // Output gain controlled by the volume slider (linear, default 1.0)
+    std::atomic<float> outputGain { 1.0f };
+
 private:
     SeparationEngine engine_;
     LicenseManager   licenseManager_;

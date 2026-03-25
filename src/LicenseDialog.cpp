@@ -135,21 +135,17 @@ void LicenseDialog::resized()
 
 void LicenseDialog::paint(juce::Graphics& g)
 {
-    g.fillAll(Bg);
-
-    // 3px accent bar on left
-    g.setColour(Accent);
-    g.fillRect(0, 0, 3, getHeight());
+    g.fillAll(Dark);
 
     // Title
     g.setColour(Text);
     g.setFont(ISOLookAndFeel::font(15.f, true));
-    g.drawText("ISO DRUMS", juce::Rectangle<int>(24, 0, 200, 44),
+    g.drawText("ISO Drums", juce::Rectangle<int>(24, 0, 200, 44),
                juce::Justification::centredLeft);
 
-    g.setColour(TextDim);
+    g.setColour(MutedLt);
     g.setFont(ISOLookAndFeel::font(9.5f));
-    g.drawText("LICENSE MANAGER", juce::Rectangle<int>(24, 26, 200, 18),
+    g.drawText("License Manager", juce::Rectangle<int>(24, 26, 200, 18),
                juce::Justification::bottomLeft);
 
     // Separator below title

@@ -136,7 +136,7 @@ MidiSettingsComponent::~MidiSettingsComponent()
 
 void MidiSettingsComponent::paint(juce::Graphics& g)
 {
-    g.fillAll(Bg);
+    g.fillAll(Dark);
 
     // Section dividers
     g.setColour(Border);

@@ -12,7 +12,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third_party/JUCE" ./JUCE)
 
 juce_add_plugin(ISODrums
-    COMPANY_NAME "ISO Drums"
+    COMPANY_NAME "Plait Audio"
+    BUNDLE_ID "com.plaitaudio.isodrums"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
@@ -48,14 +49,18 @@ target_sources(ISODrums
         src/LicenseManager.cpp
         src/LicenseManager.h
         src/LicenseDialog.cpp
-        src/LicenseDialog.h)
+        src/LicenseDialog.h
+        src/CustomStandaloneApp.cpp)
 
 target_compile_definitions(ISODrums
     PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
-        JUCE_MODAL_LOOPS_PERMITTED=1)
+        JUCE_MODAL_LOOPS_PERMITTED=1
+        JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
+    PRIVATE
+        ISO_VERSION_STRING="${PROJECT_VERSION}")
 
 file(GLOB ISO_MODEL_FILES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     "Resources/*.pt")
@@ -86,6 +91,7 @@ target_link_libraries(ISODrums
 if (APPLE)
     set(ISODRUMS_LIBTORCH_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libtorch/lib")
     set(ISODRUMS_BUNDLE_LIBTORCH_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/scripts/bundle_libtorch_macos.sh")
+    set(ISODRUMS_ICON_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Icon.icns")
     set(JUCE_COPY_DIR_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/JUCE/extras/Build/CMake/copyDir.cmake")
     foreach (_iso_bundle_target IN ITEMS ISODrums_AU ISODrums_VST3 ISODrums_Standalone)
         if (TARGET ${_iso_bundle_target})
@@ -94,6 +100,12 @@ if (APPLE)
                         "$<TARGET_BUNDLE_DIR:${_iso_bundle_target}>"
                         "${ISODRUMS_LIBTORCH_LIB_DIR}"
                 COMMENT "Bundling LibTorch into ${_iso_bundle_target}"
+                VERBATIM)
+            add_custom_command(TARGET ${_iso_bundle_target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${ISODRUMS_ICON_ICNS}"
+                        "$<TARGET_BUNDLE_DIR:${_iso_bundle_target}>/Contents/Resources/Icon.icns"
+                COMMENT "Installing multi-size Icon.icns into ${_iso_bundle_target}"
                 VERBATIM)
             get_target_property(_iso_plugin_copy_dest ${_iso_bundle_target} JUCE_PLUGIN_COPY_DIR)
             if (_iso_plugin_copy_dest)
