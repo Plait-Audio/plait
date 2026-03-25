@@ -48,5 +48,23 @@ done
 shopt -u nullglob
 
 # Re-sign after install_name_tool (invalidates prior signature)
-codesign --force --sign - --timestamp=none --deep "${BUNDLE}" 2>/dev/null || \
+# Use Developer ID if CODESIGN_IDENTITY is set, otherwise ad-hoc
+IDENTITY="${CODESIGN_IDENTITY:--}"
+ENTITLEMENTS_FILE="${ENTITLEMENTS:-}"
+
+SIGN_ARGS=(--force --sign "${IDENTITY}" --deep)
+if [[ "${IDENTITY}" != "-" ]]; then
+  SIGN_ARGS+=(--options runtime --timestamp)
+  if [[ -n "${ENTITLEMENTS_FILE}" && -f "${ENTITLEMENTS_FILE}" ]]; then
+    SIGN_ARGS+=(--entitlements "${ENTITLEMENTS_FILE}")
+  fi
+fi
+
+# Sign individual frameworks first, then the bundle
+for lib in "${FW}"/*.dylib; do
+  [[ -f "${lib}" ]] || continue
+  codesign --force --sign "${IDENTITY}" ${IDENTITY:+--options runtime --timestamp} "${lib}" 2>/dev/null || true
+done
+
+codesign "${SIGN_ARGS[@]}" "${BUNDLE}" 2>/dev/null || \
   codesign --force --sign - --deep "${BUNDLE}"

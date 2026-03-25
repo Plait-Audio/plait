@@ -82,6 +82,10 @@ void ISODrumsAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         t->getNextAudioBlock(juce::AudioSourceChannelInfo(buffer));
     else
         buffer.clear();
+
+    const float gain = outputGain.load();
+    if (std::abs(gain - 1.0f) > 0.001f)
+        buffer.applyGain(gain);
 }
 
 bool ISODrumsAudioProcessor::hasEditor() const { return true; }

@@ -61,6 +61,13 @@ ISOLookAndFeel::ISOLookAndFeel()
 
     // Label
     setColour(juce::Label::textColourId, Text);
+
+    // Window / dialog backgrounds
+    setColour(juce::ResizableWindow::backgroundColourId, Dark);
+    setColour(juce::DocumentWindow::textColourId, Text);
+    setColour(juce::AlertWindow::backgroundColourId, Dark);
+    setColour(juce::AlertWindow::textColourId, Text);
+    setColour(juce::AlertWindow::outlineColourId, Border);
 }
 
 // ── Font static helper ────────────────────────────────────────────────────────
@@ -86,6 +93,9 @@ void ISOLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& btn,
                                            const juce::Colour& bg,
                                            bool highlighted, bool down)
 {
+    if (bg.getAlpha() < 10)
+        return;
+
     const auto bounds   = btn.getLocalBounds().toFloat().reduced(0.5f);
     const bool primary  = isPrimaryButton(bg) && btn.isEnabled();
 
@@ -93,10 +103,9 @@ void ISOLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& btn,
     {
         auto fill = down ? bg.darker(0.22f) : (highlighted ? bg.brighter(0.09f) : bg);
         g.setColour(fill);
-        g.fillRoundedRectangle(bounds, 3.0f);
-        // Raised-edge highlight for tactile feel
-        g.setColour(juce::Colours::white.withAlpha(down ? 0.0f : 0.06f));
-        g.fillRoundedRectangle(bounds.withHeight(bounds.getHeight() * 0.48f), 3.0f);
+        g.fillRoundedRectangle(bounds, 8.0f);
+        g.setColour(juce::Colours::white.withAlpha(down ? 0.0f : 0.04f));
+        g.fillRoundedRectangle(bounds.withHeight(bounds.getHeight() * 0.48f), 8.0f);
     }
     else
     {
@@ -124,13 +133,13 @@ void ISOLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& btn,
     if (!btn.isEnabled())
         col = Muted.withAlpha(0.45f);
     else if (prim)
-        col = juce::Colours::white.withAlpha(down ? 0.8f : 1.0f);
+        col = juce::Colour(0xff1a1a1f).withAlpha(down ? 0.7f : 1.0f);
     else
         col = Text.withAlpha(down ? 0.6f : 0.82f);
 
     g.setColour(col);
-    g.setFont(font(11.0f, false));
-    g.drawText(btn.getButtonText().toUpperCase(),
+    g.setFont(font(prim ? 13.0f : 11.0f, true));
+    g.drawText(btn.getButtonText(),
                btn.getLocalBounds(), juce::Justification::centred);
 }
 
@@ -140,24 +149,24 @@ void ISOLookAndFeel::drawProgressBar(juce::Graphics& g, juce::ProgressBar& /*bar
                                       int w, int h, double progress, const juce::String&)
 {
     const float fw = (float)w, fh = (float)h;
-    g.setColour(Surface);
-    g.fillRoundedRectangle(0.f, 0.f, fw, fh, 2.5f);
-    g.setColour(Border);
-    g.drawRoundedRectangle(0.5f, 0.5f, fw - 1.f, fh - 1.f, 2.5f, 1.f);
-
     const float p = (float)juce::jlimit(0.0, 1.0, progress);
-    if (p > 0.f)
-    {
-        g.setColour(Accent);
-        g.fillRoundedRectangle(1.f, 1.f, (fw - 2.f) * p, fh - 2.f, 1.5f);
-    }
 
-    if (p > 0.01f && p < 0.99f)
+    // Segmented dot-style progress bar
+    const float dotW   = 4.f;
+    const float dotH   = fh * 0.55f;
+    const float gap    = 2.5f;
+    const float startX = 0.f;
+    const float dotY   = (fh - dotH) * 0.5f;
+    const int   numDots = (int)((fw) / (dotW + gap));
+
+    for (int i = 0; i < numDots; ++i)
     {
-        g.setColour(Text.withAlpha(0.65f));
-        g.setFont(font(9.f));
-        g.drawText(juce::String(juce::roundToInt(p * 100.f)) + "%",
-                   0, 0, w, h, juce::Justification::centred);
+        float x = startX + (float)i * (dotW + gap);
+        float frac = (float)i / (float)numDots;
+        bool filled = frac < p;
+        g.setColour(filled ? Accent.withAlpha(0.85f)
+                           : juce::Colour(0xff424264).withAlpha(0.4f));
+        g.fillRoundedRectangle(x, dotY, dotW, dotH, 1.f);
     }
 }
 

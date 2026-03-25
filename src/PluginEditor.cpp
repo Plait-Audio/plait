@@ -1,9 +1,11 @@
 #include "PluginEditor.h"
+#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#include <map>
 
 // ---- Colour / label tables ----
 
 const juce::Colour ISODrumsAudioProcessorEditor::kRowColours[kNumRows] = {
-    juce::Colour(0xffe8e4df),   // Input   — warm white (inactive)
+    juce::Colour(0xffffffff),   // Input   — white
     juce::Colour(0xffc45c5c),   // Kick    — Plait red
     juce::Colour(0xffc98a4a),   // Snare   — Plait amber
     juce::Colour(0xff6b9e6b),   // Toms    — Plait green
@@ -12,10 +14,9 @@ const juce::Colour ISODrumsAudioProcessorEditor::kRowColours[kNumRows] = {
 };
 
 const char* ISODrumsAudioProcessorEditor::kRowLabels[kNumRows] = {
-    "Input", "Kick", "Snare", "Toms", "Hi-Hat", "Cymbals"
+    "Input", "Kick", "Snare", "Toms", "Hats", "Cymbals"
 };
 
-// ---- Colours (aliased from ISOPalette for local convenience) ----
 static const juce::Colour kBg      { ISOPalette::Bg      };
 static const juce::Colour kSurface { ISOPalette::Surface };
 static const juce::Colour kRowBg   { ISOPalette::RowBg   };
@@ -39,7 +40,6 @@ static double estimateBpm(const std::vector<DrumHit>& hits, double sampleRate)
     {
         double ioi = pos[i] - pos[i - 1];
         juce::ignoreUnused(sampleRate);
-        // Consider the raw interval and its 2× / 4× multiples (8th / quarter / half)
         for (int mult : {1, 2, 4})
         {
             double period = ioi * mult;
@@ -68,7 +68,6 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
     p.separationRunning.store(true);
     p.separationProgress.store(0.0f);
 
-    // Step 1 — copy input buffer under lock, then separate off the lock
     juce::AudioBuffer<float> inputCopy;
     double sampleRate = 44100.0;
     {
@@ -80,13 +79,10 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
     if (threadShouldExit()) { p.separationRunning.store(false); return; }
 
     auto result = p.getEngine().separate(inputCopy, sampleRate, &p.separationProgress);
-
-    // Release the input copy now — stems are in result, raw audio no longer needed
     inputCopy = juce::AudioBuffer<float>();
 
     if (threadShouldExit()) { p.separationRunning.store(false); return; }
 
-    // Step 2 — onset detection on each stem
     OnsetDetector detector;
     std::vector<DrumHit> hits;
 
@@ -107,7 +103,6 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
         p.separationProgress.store(s.prog);
     }
 
-    // Step 3 — store results under lock; estimate BPM while we have the data
     {
         juce::ScopedLock sl(p.resultLock);
         p.separationResult = std::move(result);
@@ -118,7 +113,6 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
     p.separationProgress.store(1.0f);
     p.separationRunning.store(false);
 
-    // Notify UI on message thread
     juce::MessageManager::callAsync(onDone_);
 }
 
@@ -134,12 +128,10 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     setLookAndFeel(&lookAndFeel_);
     formatManager_.registerBasicFormats();
 
-    // Temp folder for WAV exports
     tempDir_ = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
                            .getChildFile("ISODrumsTemp");
     tempDir_.createDirectory();
 
-    // Thumbnails — register as change listeners so waveforms repaint
     thumbInput_  .addChangeListener(this);
     thumbKick_   .addChangeListener(this);
     thumbSnare_  .addChangeListener(this);
@@ -147,9 +139,11 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     thumbHihat_  .addChangeListener(this);
     thumbCymbals_.addChangeListener(this);
 
-    // ---- Header buttons ----
+    // ---- Load button (gold bg, black text, sentence-case) ----
     loadButton_.setButtonText("Load");
     loadButton_.setColour(juce::TextButton::buttonColourId, kAccent);
+    loadButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
+    loadButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
     loadButton_.onClick = [this]
     {
         juce::FileChooser chooser("Load audio file", {}, "*.wav;*.aiff;*.aif;*.flac;*.mp3");
@@ -158,73 +152,131 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     };
     addAndMakeVisible(loadButton_);
 
-    licenseButton_.setButtonText("License");
-    licenseButton_.setColour(juce::TextButton::buttonColourId, kSurface);
-    licenseButton_.onClick = [this] { showLicenseDialog(); };
-    addAndMakeVisible(licenseButton_);
+    // ---- Settings button (gear icon drawn in paint) ----
+    settingsButton_.setButtonText("");
+    settingsButton_.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    settingsButton_.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    settingsButton_.onClick = [this]
+    {
+        juce::PopupMenu m;
+        m.addItem(1, "Audio/MIDI Settings...");
+        m.addSeparator();
+        m.addItem(2, "License...");
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&settingsButton_),
+            [this](int result)
+            {
+                if (result == 1)
+                {
+                    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+                        holder->showAudioSettingsDialog();
+                }
+                else if (result == 2)
+                {
+                    showLicenseDialog();
+                }
+            });
+    };
+    addAndMakeVisible(settingsButton_);
 
-    // ---- Per-row play buttons ----
+    // ---- Volume slider ----
+    volumeSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
+    volumeSlider_.setRange(-60.0, 6.0, 0.1);
+    volumeSlider_.setValue(0.0);
+    volumeSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 20);
+    volumeSlider_.setColour(juce::Slider::trackColourId, kBorder);
+    volumeSlider_.setColour(juce::Slider::thumbColourId, kText);
+    volumeSlider_.setColour(juce::Slider::textBoxTextColourId, kMuted);
+    volumeSlider_.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    volumeSlider_.setTextValueSuffix(" dB");
+    volumeSlider_.onValueChange = [this]
+    {
+        float gain = juce::Decibels::decibelsToGain((float)volumeSlider_.getValue());
+        audioProcessor_.outputGain.store(gain);
+    };
+    addAndMakeVisible(volumeSlider_);
+
+    // ---- Per-row solo buttons ----
     for (int i = 0; i < kNumRows; ++i)
     {
-        playButtons_[i].setButtonText(i == 0 ? "Play" : "Solo");
-        playButtons_[i].setColour(juce::TextButton::buttonColourId, kSurface);
-        playButtons_[i].setEnabled(false);
+        soloButtons_[i].setButtonText("");
+        soloButtons_[i].setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+        soloButtons_[i].setEnabled(false);
         const int idx = i;
-        playButtons_[i].onClick = [this, idx]
+        soloButtons_[i].onClick = [this, idx]
         {
             if (soloStemIndex_ == idx)
                 setSolo(-1);
             else
                 setSolo(idx);
         };
-        addAndMakeVisible(playButtons_[i]);
+        addAndMakeVisible(soloButtons_[i]);
     }
 
-    // ---- Per-stem save buttons ----
-    for (int i = 0; i < 5; ++i)
+    // ---- Per-row save buttons (dropdown: WAV or MIDI) ----
+    for (int i = 0; i < kNumRows; ++i)
     {
-        saveButtons_[i].setButtonText("Save");
-        saveButtons_[i].setColour(juce::TextButton::buttonColourId, kSurface);
+        saveButtons_[i].setButtonText("");
+        saveButtons_[i].setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
         saveButtons_[i].setEnabled(false);
         const int idx = i;
         saveButtons_[i].onClick = [this, idx]
         {
-            if (!audioProcessor_.getLicenseManager().canExportWav())
+            if (idx == 0)
             {
-                showExportLimitMessage(true);
+                if (soloStemIndex_ == 0) setSolo(-1);
+                else setSolo(0);
                 return;
             }
 
-            // Stem order: kick=0, snare=1, toms=2, hihat=3, cymbals=4
-            static const char* suffixes[5] = { "_kick", "_snare", "_toms", "_hihat", "_cymbals" };
-            juce::FileChooser chooser("Save stem WAV", {},  "*.wav");
-            if (!chooser.browseForFileToSave(true)) return;
+            juce::PopupMenu m;
+            m.addItem(1, "Export WAV");
+            m.addItem(2, "Export MIDI");
+            m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&saveButtons_[idx]),
+                [this, idx](int result)
+                {
+                    if (result == 1)
+                    {
+                        if (!audioProcessor_.getLicenseManager().canExportWav())
+                        {
+                            showExportLimitMessage(true);
+                            return;
+                        }
 
-            const juce::AudioBuffer<float>* buf = nullptr;
-            {
-                juce::ScopedLock sl(audioProcessor_.resultLock);
-                switch (idx) {
-                    case 0: buf = &audioProcessor_.separationResult.kick;    break;
-                    case 1: buf = &audioProcessor_.separationResult.snare;   break;
-                    case 2: buf = &audioProcessor_.separationResult.toms;    break;
-                    case 3: buf = &audioProcessor_.separationResult.hihat;   break;
-                    case 4: buf = &audioProcessor_.separationResult.cymbals; break;
-                }
-                if (buf == nullptr || buf->getNumSamples() == 0) return;
+                        const int stemIdx = idx - 1;
+                        juce::FileChooser chooser("Save stem WAV", {},  "*.wav");
+                        if (!chooser.browseForFileToSave(true)) return;
 
-                juce::WavAudioFormat fmt;
-                auto outFile = chooser.getResult().withFileExtension("wav");
-                outFile.deleteFile();
-                auto stream = std::make_unique<juce::FileOutputStream>(outFile);
-                if (!stream->openedOk()) return;
-                auto writer = std::unique_ptr<juce::AudioFormatWriter>(
-                    fmt.createWriterFor(stream.release(),
-                                        audioProcessor_.inputSampleRate,
-                                        static_cast<unsigned int>(buf->getNumChannels()),
-                                        16, {}, 0));
-                if (writer)
-                    writer->writeFromAudioSampleBuffer(*buf, 0, buf->getNumSamples());
-            }
+                        const juce::AudioBuffer<float>* buf = nullptr;
+                        {
+                            juce::ScopedLock sl(audioProcessor_.resultLock);
+                            switch (stemIdx) {
+                                case 0: buf = &audioProcessor_.separationResult.kick;    break;
+                                case 1: buf = &audioProcessor_.separationResult.snare;   break;
+                                case 2: buf = &audioProcessor_.separationResult.toms;    break;
+                                case 3: buf = &audioProcessor_.separationResult.hihat;   break;
+                                case 4: buf = &audioProcessor_.separationResult.cymbals; break;
+                            }
+                            if (buf == nullptr || buf->getNumSamples() == 0) return;
+
+                            juce::WavAudioFormat fmt;
+                            auto outFile = chooser.getResult().withFileExtension("wav");
+                            outFile.deleteFile();
+                            auto stream = std::make_unique<juce::FileOutputStream>(outFile);
+                            if (!stream->openedOk()) return;
+                            auto writer = std::unique_ptr<juce::AudioFormatWriter>(
+                                fmt.createWriterFor(stream.release(),
+                                                    audioProcessor_.inputSampleRate,
+                                                    static_cast<unsigned int>(buf->getNumChannels()),
+                                                    16, {}, 0));
+                            if (writer)
+                                writer->writeFromAudioSampleBuffer(*buf, 0, buf->getNumSamples());
+                        }
+                    }
+                    else if (result == 2)
+                    {
+                        showMidiDialog();
+                    }
+                });
         };
         addAndMakeVisible(saveButtons_[i]);
     }
@@ -232,27 +284,32 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     // ---- Toolbar ----
     separateButton_.setButtonText("Separate");
     separateButton_.setColour(juce::TextButton::buttonColourId, kAccent);
+    separateButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
+    separateButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
     separateButton_.setEnabled(false);
     separateButton_.onClick = [this] { startSeparation(); };
     addAndMakeVisible(separateButton_);
 
-    exportWavsButton_.setButtonText("Export WAVs");
-    exportWavsButton_.setColour(juce::TextButton::buttonColourId, kSurface);
+    exportWavsButton_.setButtonText("WAV");
+    exportWavsButton_.setColour(juce::TextButton::buttonColourId, kAccent);
+    exportWavsButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
+    exportWavsButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
     exportWavsButton_.setEnabled(false);
     exportWavsButton_.onClick = [this] { exportWavs(); };
     addAndMakeVisible(exportWavsButton_);
 
-    exportMidiButton_.setButtonText("Export MIDI");
-    exportMidiButton_.setColour(juce::TextButton::buttonColourId, kSurface);
+    exportMidiButton_.setButtonText("MIDI");
+    exportMidiButton_.setColour(juce::TextButton::buttonColourId, kAccent);
+    exportMidiButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
+    exportMidiButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
     exportMidiButton_.setEnabled(false);
     exportMidiButton_.onClick = [this] { showMidiDialog(); };
     addAndMakeVisible(exportMidiButton_);
 
     progressBar_.setColour(juce::ProgressBar::foregroundColourId, kAccent);
-    progressBar_.setVisible(false);
     addAndMakeVisible(progressBar_);
 
-    setSize(960, 590);
+    setSize(960, 700);
     startTimerHz(24);
 }
 
@@ -269,7 +326,6 @@ ISODrumsAudioProcessorEditor::~ISODrumsAudioProcessorEditor()
     thumbHihat_  .removeChangeListener(this);
     thumbCymbals_.removeChangeListener(this);
 
-    // Detach all transport sources before our unique_ptrs are destroyed
     audioProcessor_.activeTransport.store(nullptr);
     audioProcessor_.transportInput  .setSource(nullptr);
     audioProcessor_.transportKick   .setSource(nullptr);
@@ -285,155 +341,357 @@ ISODrumsAudioProcessorEditor::~ISODrumsAudioProcessorEditor()
 
 void ISODrumsAudioProcessorEditor::resized()
 {
-    constexpr int kHeaderH   = 50;
-    constexpr int kRowH      = 72;
-    constexpr int kToolbarH  = 55;
-    constexpr int kStatusH   = 28;
-    constexpr int kPad       = 8;
-    constexpr int kLabelW    = 75;
-    constexpr int kBtnW      = 58;
-    constexpr int kBtnGap    = 4;
+    constexpr int kPadH        = 50;
+    constexpr int kHeaderH     = 36;
+    constexpr int kRowGap      = 2;
+    constexpr int kRowToolGap  = 16;
+    constexpr int kToolbarH    = 34;
+    constexpr int kFooterH     = 28;
+    constexpr int kFooterZoneH = 80;
+    constexpr int kIconCol     = 28;
+    constexpr int kColorStrip  = 3;
+    constexpr int kIconGap     = 2;
+    constexpr int kBtnMinW     = 90;
+    constexpr int kBtnGap      = 10;
 
-    auto area = getLocalBounds();
+    auto content = getLocalBounds();
+    content.removeFromLeft(kPadH);
+    content.removeFromRight(kPadH);
 
-    // Header
-    auto header = area.removeFromTop(kHeaderH);
-    loadButton_   .setBounds(header.removeFromRight(80) .reduced(kPad));
-    licenseButton_.setBounds(header.removeFromRight(100).reduced(kPad));
-
-    // Waveform rows
-    for (int i = 0; i < kNumRows; ++i)
-    {
-        auto row = area.removeFromTop(kRowH);
-        rowBounds_[i] = row;
-
-        // Buttons on right
-        auto btnArea = row.removeFromRight(kBtnW * 2 + kBtnGap * 3);
-        btnArea.reduce(0, kPad);
-        playButtons_[i].setBounds(btnArea.removeFromTop(btnArea.getHeight() / 2).reduced(kBtnGap / 2));
-        if (i > 0)  // stems have a Save button
-            saveButtons_[i - 1].setBounds(btnArea.reduced(kBtnGap / 2));
-
-        // Waveform
-        row.removeFromLeft(kPad);
-        waveformBounds_[i] = row.reduced(0, kPad);
-    }
-
-    // Status
-    auto statusRow = area.removeFromBottom(kStatusH);
-    juce::ignoreUnused(statusRow);
+    // Footer zone at bottom — content will be vertically centered within
+    auto footerZone = content.removeFromBottom(kFooterZoneH);
+    footerBounds_ = footerZone.withSizeKeepingCentre(footerZone.getWidth(), kFooterH);
 
     // Toolbar
-    toolbarBounds_ = area.removeFromBottom(kToolbarH);
-    auto toolbar = toolbarBounds_.reduced(kPad);
-    separateButton_  .setBounds(toolbar.removeFromLeft(120));
-    toolbar.removeFromLeft(kPad);
-    exportWavsButton_.setBounds(toolbar.removeFromLeft(120));
-    toolbar.removeFromLeft(kPad);
-    exportMidiButton_.setBounds(toolbar.removeFromLeft(140));
+    toolbarBounds_ = content.removeFromBottom(kToolbarH);
+    content.removeFromBottom(kRowToolGap);
 
-    progressBar_.setBounds(toolbarBounds_.withTrimmedLeft(420).reduced(kPad));
+    // Header with balanced vertical centering
+    const int availableForRowsAndGaps = content.getHeight() - kHeaderH;
+    const int balancedGap = juce::jlimit(15, 40, availableForRowsAndGaps / 12);
+
+    auto header = content.removeFromTop(balancedGap + kHeaderH);
+    header.removeFromTop(balancedGap);
+    content.removeFromTop(balancedGap);
+
+    // --- Header layout ---
+    // ISO Drums icon (painted): reserve space at far right
+    const int isoIconW = (int)(35.f * (425.f / 476.f));
+    const int isoLeftX = getWidth() - kPadH - isoIconW;
+    header.removeFromRight(isoIconW);
+
+    // Settings zone + load button from the right
+    constexpr int kSettingsZone = 48;
+    header.removeFromRight(kSettingsZone);
+    constexpr int kLoadW = 90;
+    loadButton_.setBounds(header.removeFromRight(kLoadW).reduced(0, 2));
+
+    // Settings button: centered between load right and ISO icon left
+    {
+        int midX = (loadButton_.getRight() + isoLeftX) / 2;
+        constexpr int kSettSz = 28;
+        settingsButton_.setBounds(
+            juce::Rectangle<int>(midX - kSettSz / 2,
+                                 header.getY() + (header.getHeight() - kSettSz) / 2,
+                                 kSettSz, kSettSz));
+    }
+
+    // Volume slider
+    {
+        const int leftEdge  = header.getX() + 210;
+        const int rightEdge = header.getRight();
+        auto volArea = juce::Rectangle<int>(leftEdge, header.getY(),
+                                            rightEdge - leftEdge, header.getHeight());
+        volArea = volArea.withSizeKeepingCentre(juce::jmin(160, volArea.getWidth()), 22);
+        volArea.setCentre(volArea.getCentreX(), header.getCentreY());
+        volumeSlider_.setBounds(volArea);
+    }
+
+    // --- Toolbar layout ---
+    {
+        auto tb = toolbarBounds_;
+        separateButton_  .setBounds(tb.removeFromLeft(kBtnMinW));
+        tb.removeFromLeft(kBtnGap);
+        exportWavsButton_.setBounds(tb.removeFromLeft(kBtnMinW));
+        tb.removeFromLeft(kBtnGap);
+        exportMidiButton_.setBounds(tb.removeFromLeft(kBtnMinW));
+
+        // Progress: right-aligned with content edge (tracks / footer)
+        auto progressArea = tb;
+        progressArea.removeFromLeft(20);
+        progressArea.removeFromLeft(36);
+        progressArea.removeFromRight(88);
+        progressBar_.setBounds(progressArea.reduced(0, 4));
+    }
+
+    // --- Waveform rows ---
+    const int totalRowGaps = (kNumRows - 1) * kRowGap;
+    const int rowH = (content.getHeight() - totalRowGaps) / kNumRows;
+
+    for (int i = 0; i < kNumRows; ++i)
+    {
+        auto row = content.removeFromTop(rowH);
+        rowBounds_[i] = row;
+
+        auto iconCol = row.removeFromLeft(kIconCol);
+        iconCol.reduce(0, 2);
+        auto topIcon = iconCol.removeFromTop((iconCol.getHeight() - kIconGap) / 2);
+        iconCol.removeFromTop(kIconGap);
+        auto botIcon = iconCol;
+        soloButtons_[i].setBounds(topIcon);
+        saveButtons_[i].setBounds(botIcon);
+
+        row.removeFromLeft(kColorStrip + 4);
+        waveformBounds_[i] = row;
+
+        if (i < kNumRows - 1)
+            content.removeFromTop(kRowGap);
+    }
 }
 
 // ============================================================================
 // Paint
 // ============================================================================
 
+static std::unique_ptr<juce::Drawable>& getCachedSVG(const char* data, int size)
+{
+    static std::map<const char*, std::unique_ptr<juce::Drawable>> cache;
+    auto it = cache.find(data);
+    if (it == cache.end())
+    {
+        auto xml = juce::XmlDocument::parse(juce::String::fromUTF8(data, size));
+        auto drawable = xml ? juce::Drawable::createFromSVG(*xml) : nullptr;
+        it = cache.emplace(data, std::move(drawable)).first;
+    }
+    return it->second;
+}
+
+static juce::Image& getCachedImage(const char* data, int size)
+{
+    static std::map<const char*, juce::Image> cache;
+    auto it = cache.find(data);
+    if (it == cache.end())
+        it = cache.emplace(data, juce::ImageCache::getFromMemory(data, size)).first;
+    return it->second;
+}
+
+static void drawSVGInRect(juce::Graphics& g, const char* data, int size,
+                           juce::Rectangle<float> rect, float opacity = 1.f)
+{
+    auto& svg = getCachedSVG(data, size);
+    if (svg)
+    {
+        svg->setTransformToFit(rect, juce::RectanglePlacement::centred);
+        svg->draw(g, opacity);
+    }
+}
+
+static void drawImageInRect(juce::Graphics& g, const char* data, int size,
+                             juce::Rectangle<float> rect, float opacity = 1.f)
+{
+    auto& img = getCachedImage(data, size);
+    if (img.isValid())
+    {
+        g.setOpacity(opacity);
+        g.drawImage(img,
+                    (int)rect.getX(), (int)rect.getY(),
+                    (int)rect.getWidth(), (int)rect.getHeight(),
+                    0, 0, img.getWidth(), img.getHeight());
+        g.setOpacity(1.f);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    // ── Body ──────────────────────────────────────────────────────────────────
+    constexpr int kPadH = 50;
+
     g.fillAll(kBg);
 
-    // ── Toolbar surface + top separator ───────────────────────────────────────
-    g.setColour(kSurface);
-    g.fillRect(toolbarBounds_);
-    g.setColour(kBorder);
-    g.fillRect(toolbarBounds_.withHeight(1));
-
-    // ── Header separator ──────────────────────────────────────────────────────
-    g.fillRect(juce::Rectangle<int>(0, 50, getWidth(), 1));
-
-    // ── ISO Drums horizontal logo (embedded PNG) ──────────────────────────────
+    // ── Footer ────────────────────────────────────────────────────────────────
     {
-        static const juce::Image logoImg = juce::ImageCache::getFromMemory(
-            BinaryData::logoisodrumshorizwhite_png,
-            BinaryData::logoisodrumshorizwhite_pngSize);
+        auto fb = footerBounds_;
 
-        if (logoImg.isValid())
-        {
-            // Draw at fixed height of 22px, width proportional
-            const float logoH = 22.f;
-            const float logoW = logoH * (float)logoImg.getWidth() / (float)logoImg.getHeight();
-            const float logoX = 14.f;
-            const float logoY = (50.f - logoH) * 0.5f;
-            g.setOpacity(0.92f);
-            g.drawImage(logoImg,
-                        (int)logoX, (int)logoY, (int)logoW, (int)logoH,
-                        0, 0, logoImg.getWidth(), logoImg.getHeight());
-            g.setOpacity(1.0f);
-        }
-        else
-        {
-            // Fallback: hand-drawn mark if image didn't load
-            g.setColour(kText);
-            g.setFont(ISOLookAndFeel::font(14.f, true));
-            g.drawText("ISO DRUMS", juce::Rectangle<int>(14, 0, 160, 50),
-                       juce::Justification::centredLeft);
-        }
+        const float plaitH = 31.f;
+        drawImageInRect(g, BinaryData::logoplaiticonwhite_png,
+                        BinaryData::logoplaiticonwhite_pngSize,
+                        juce::Rectangle<float>((float)fb.getX(),
+                            fb.getY() + (fb.getHeight() - plaitH) * 0.5f,
+                            plaitH, plaitH), 1.f);
+
+        const float svgH = 26.f;
+        const float svgW = svgH * (273.f / 40.f);
+        drawSVGInRect(g, BinaryData::designedbyplait_svg,
+                      BinaryData::designedbyplait_svgSize,
+                      juce::Rectangle<float>(
+                          (float)fb.getRight() - svgW,
+                          fb.getY() + (fb.getHeight() - svgH) * 0.5f,
+                          svgW, svgH), 1.f);
     }
 
-    // ── License status chip ───────────────────────────────────────────────────
-    auto& lm = audioProcessor_.getLicenseManager();
-    const auto licState = lm.getState();
-    juce::String licText;
-    juce::Colour licDot;
-    switch (licState)
+    // ── Toolbar: progress indicators (always visible) ────────────────────────
     {
-        case LicenseState::Trial:
-            licText = juce::String(lm.trialDaysRemaining()) + "D TRIAL"
-                    + "   " + juce::String(lm.wavExportsRemaining()) + "W  "
-                    + juce::String(lm.midiExportsRemaining()) + "M";
-            licDot = juce::Colour(0xffffaa33);
-            break;
-        case LicenseState::TrialExpired:
-            licText = "TRIAL EXPIRED";
-            licDot  = juce::Colour(0xffff4444);
-            break;
-        case LicenseState::Licensed:
-            licText = "LICENSED";
-            licDot  = juce::Colour(0xff44cc66);
-            break;
-        case LicenseState::LicenseCheckNeeded:
-            licText = "CHECK LICENSE";
-            licDot  = juce::Colour(0xffffaa33);
-            break;
-    }
+        int pct = juce::roundToInt(progressValue_ * 100.0);
+        auto pbarBounds = progressBar_.getBounds();
 
-    // Chip: sits between title and the right-side buttons
-    {
-        g.setFont(ISOLookAndFeel::font(9.5f, true));
-        const float textW = g.getCurrentFont().getStringWidthFloat(licText);
-        const float chipW = textW + 28.0f;
-        const float chipH = 20.0f;
-        const float chipX = 200.0f;
-        const float chipY = (50.0f - chipH) * 0.5f;
-
-        juce::Rectangle<float> chip(chipX, chipY, chipW, chipH);
-        g.setColour(kSurface);
-        g.fillRoundedRectangle(chip, 3.0f);
-        g.setColour(kBorder);
-        g.drawRoundedRectangle(chip.reduced(0.5f), 3.0f, 1.0f);
-
-        // Status LED dot
-        g.setColour(licDot);
-        const float dotR = 3.5f;
-        g.fillEllipse(chipX + 9.0f - dotR, chip.getCentreY() - dotR, dotR * 2.0f, dotR * 2.0f);
-
-        // Text
-        g.setColour(kText.withAlpha(0.78f));
-        g.drawText(licText,
-                   juce::Rectangle<float>(chipX + 19.0f, chipY, chipW - 22.0f, chipH),
+        g.setColour(ISOPalette::MutedLt);
+        g.setFont(ISOLookAndFeel::font(10.f));
+        g.drawText(juce::String(pct) + "%",
+                   pbarBounds.withX(pbarBounds.getX() - 36).withWidth(32),
+                   juce::Justification::centredRight);
+        g.drawText("Processing",
+                   pbarBounds.withX(pbarBounds.getRight() + 8).withWidth(80),
                    juce::Justification::centredLeft);
+    }
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    // Use loadButton_ position to derive the header Y since resized() places it
+    const float headerY = (float)loadButton_.getY() - 2.f;
+    const float headerH = (float)loadButton_.getHeight() + 4.f;
+    const float contentLeft = (float)kPadH;
+    const float contentRight = (float)(getWidth() - kPadH);
+
+    // ISO DRUMS wordmark SVG
+    {
+        const float wmH = 23.f;
+        const float wmW = wmH * (265.f / 32.f);
+        const float wmX = contentLeft;
+        const float wmY = headerY + (headerH - wmH) * 0.5f - 1.f;
+        drawSVGInRect(g, BinaryData::logoisodrumswordmarkwhite_svg,
+                      BinaryData::logoisodrumswordmarkwhite_svgSize,
+                      juce::Rectangle<float>(wmX, wmY, wmW, wmH), 1.f);
+
+#ifndef ISO_VERSION_STRING
+#define ISO_VERSION_STRING "0.1.0"
+#endif
+        g.setColour(kMuted);
+        g.setFont(ISOLookAndFeel::font(10.f));
+        g.drawText("v " ISO_VERSION_STRING,
+                   juce::Rectangle<float>(wmX + wmW + 6.f, wmY, 50.f, wmH),
+                   juce::Justification::bottomLeft);
+    }
+
+    // ISO Drums icon
+    {
+        const float iconH = 35.f;
+        const float iconW = iconH * (425.f / 476.f);
+        drawImageInRect(g, BinaryData::logoisodrumsiconwhite_png,
+                        BinaryData::logoisodrumsiconwhite_pngSize,
+                        juce::Rectangle<float>(
+                            contentRight - iconW,
+                            headerY + (headerH - iconH) * 0.5f,
+                            iconW, iconH), 1.f);
+    }
+
+    // Settings gear icon (20% smaller than previous ~24px → ~19px)
+    {
+        auto b = settingsButton_.getBounds().toFloat();
+        const float iconSz = 19.f;
+        auto iconRect = juce::Rectangle<float>(
+            b.getCentreX() - iconSz * 0.5f,
+            b.getCentreY() - iconSz * 0.5f,
+            iconSz, iconSz);
+        drawSVGInRect(g, BinaryData::settingsicon_svg,
+                      BinaryData::settingsicon_svgSize,
+                      iconRect, 0.8f);
+    }
+
+    // Trial / License — plain text, no pill
+    {
+        auto& lm = audioProcessor_.getLicenseManager();
+        const auto st = lm.getState();
+
+        const float textY = headerY;
+        const float textH = headerH;
+        const float textRight = (float)loadButton_.getX() - 12.f;
+
+        g.setFont(ISOLookAndFeel::font(11.f, true));
+
+        switch (st)
+        {
+            case LicenseState::Trial:
+            {
+                juce::String days  = juce::String(lm.trialDaysRemaining()) + " Days";
+                juce::String wavs  = juce::String(lm.wavExportsRemaining()) + " Wav";
+                juce::String midis = juce::String(lm.midiExportsRemaining()) + " Midi";
+
+                g.setFont(ISOLookAndFeel::font(11.f));
+                float daysW  = g.getCurrentFont().getStringWidthFloat(days);
+                float wavsW  = g.getCurrentFont().getStringWidthFloat(wavs);
+                float midisW = g.getCurrentFont().getStringWidthFloat(midis);
+                g.setFont(ISOLookAndFeel::font(11.f, true));
+                float trialW = g.getCurrentFont().getStringWidthFloat("Trial");
+
+                const float sep = 8.f;
+                const float barW = 6.f;
+                float totalW = trialW + barW + sep + daysW + barW + sep + wavsW + barW + sep + midisW;
+                float tx = textRight - totalW;
+
+                g.setColour(kAccent);
+                g.setFont(ISOLookAndFeel::font(11.f, true));
+                g.drawText("Trial", juce::Rectangle<float>(tx, textY, trialW, textH),
+                           juce::Justification::centredLeft);
+                tx += trialW + sep * 0.5f;
+
+                g.setColour(kAccent.withAlpha(0.5f));
+                g.drawText("|", juce::Rectangle<float>(tx, textY, barW, textH),
+                           juce::Justification::centred);
+                tx += barW + sep * 0.5f;
+
+                g.setColour(kText);
+                g.setFont(ISOLookAndFeel::font(11.f));
+                g.drawText(days, juce::Rectangle<float>(tx, textY, daysW, textH),
+                           juce::Justification::centredLeft);
+                tx += daysW + sep * 0.5f;
+
+                g.setColour(kAccent.withAlpha(0.5f));
+                g.drawText("|", juce::Rectangle<float>(tx, textY, barW, textH),
+                           juce::Justification::centred);
+                tx += barW + sep * 0.5f;
+
+                g.setColour(kText);
+                g.drawText(wavs, juce::Rectangle<float>(tx, textY, wavsW, textH),
+                           juce::Justification::centredLeft);
+                tx += wavsW + sep * 0.5f;
+
+                g.setColour(kAccent.withAlpha(0.5f));
+                g.drawText("|", juce::Rectangle<float>(tx, textY, barW, textH),
+                           juce::Justification::centred);
+                tx += barW + sep * 0.5f;
+
+                g.setColour(kText);
+                g.drawText(midis, juce::Rectangle<float>(tx, textY, midisW, textH),
+                           juce::Justification::centredLeft);
+                break;
+            }
+            case LicenseState::TrialExpired:
+                g.setColour(juce::Colour(0xffff4444));
+                g.drawText("Trial Expired", juce::Rectangle<float>(textRight - 120.f, textY, 120.f, textH),
+                           juce::Justification::centredRight);
+                break;
+            case LicenseState::Licensed:
+                g.setColour(juce::Colour(0xff44cc66));
+                g.drawText("Licensed", juce::Rectangle<float>(textRight - 80.f, textY, 80.f, textH),
+                           juce::Justification::centredRight);
+                break;
+            case LicenseState::LicenseCheckNeeded:
+                g.setColour(kAccent);
+                g.drawText("Check License", juce::Rectangle<float>(textRight - 120.f, textY, 120.f, textH),
+                           juce::Justification::centredRight);
+                break;
+        }
+    }
+
+    // Volume icon (SVG)
+    {
+        auto slBounds = volumeSlider_.getBounds();
+        const float iconSz = 16.f;
+        drawSVGInRect(g, BinaryData::volumeloud_svg, BinaryData::volumeloud_svgSize,
+                      juce::Rectangle<float>(
+                          (float)slBounds.getX() - iconSz - 4.f,
+                          (float)slBounds.getCentreY() - iconSz * 0.5f,
+                          iconSz, iconSz), 0.6f);
     }
 
     // ── Waveform rows ─────────────────────────────────────────────────────────
@@ -448,6 +706,31 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
         paintWaveformRow(g, rowBounds_[i], kRowLabels[i], *thumbs[i],
                          kRowColours[i], active, draggable);
     }
+
+    // ── Solo/Save icons ───────────────────────────────────────────────────────
+    for (int i = 0; i < kNumRows; ++i)
+    {
+        const bool hasStem = (i == 0) ? fileLoaded_ : stemsDone_;
+        const float iconAlpha = hasStem ? 0.75f : 0.25f;
+
+        auto soloBounds = soloButtons_[i].getBounds().toFloat().reduced(5.f);
+        drawSVGInRect(g, BinaryData::soloicon_svg, BinaryData::soloicon_svgSize,
+                      soloBounds, (soloStemIndex_ == i) ? 1.f : iconAlpha);
+
+        auto saveBounds = saveButtons_[i].getBounds().toFloat().reduced(5.f);
+        drawSVGInRect(g, BinaryData::saveicon_svg, BinaryData::saveicon_svgSize,
+                      saveBounds, iconAlpha);
+
+        // Paint gap between solo/save with app background color
+        int gapY = soloButtons_[i].getBottom();
+        int gapH = saveButtons_[i].getY() - gapY;
+        if (gapH > 0)
+        {
+            g.setColour(kBg);
+            g.fillRect(rowBounds_[i].getX(), gapY,
+                       28, gapH);
+        }
+    }
 }
 
 void ISODrumsAudioProcessorEditor::paintWaveformRow(juce::Graphics& g,
@@ -456,75 +739,74 @@ void ISODrumsAudioProcessorEditor::paintWaveformRow(juce::Graphics& g,
                                                      juce::AudioThumbnail& thumb,
                                                      juce::Colour waveColour,
                                                      bool active,
-                                                     bool draggable) const
+                                                     bool /*draggable*/) const
 {
-    // ── Row body ──────────────────────────────────────────────────────────────
-    g.setColour(active ? kRowBg.brighter(0.07f) : kRowBg);
-    g.fillRect(bounds.reduced(0, 1));
+    constexpr int kIconCol    = 28;
+    constexpr int kColorStrip = 3;
+    constexpr float kRadius   = 6.f;
 
-    // ── Colored left accent strip (3 px) ──────────────────────────────────────
-    auto strip = bounds.removeFromLeft(3);
-    g.setColour(waveColour.withAlpha(active ? 0.95f : 0.55f));
-    g.fillRect(strip);
+    // Determine which row this is for selective rounding
+    int rowIdx = -1;
+    for (int i = 0; i < kNumRows; ++i)
+        if (rowBounds_[i] == bounds) { rowIdx = i; break; }
 
-    // ── Skip button area on right (128 px = 2 × 58 + 3 × 4) ─────────────────
-    bounds.removeFromRight(128);
+    const bool isFirst = (rowIdx == 0);
+    const bool isLast  = (rowIdx == kNumRows - 1);
 
-    // ── Label panel ───────────────────────────────────────────────────────────
-    auto labelPanel = bounds.removeFromLeft(78);
-    g.setColour(kSurface);
-    g.fillRect(labelPanel);
+    // Unified background — only round top corners on first row, bottom on last
+    {
+        auto r = bounds.toFloat();
+        juce::Path bg;
+        if (isFirst && isLast)
+            bg.addRoundedRectangle(r, kRadius);
+        else if (isFirst)
+            bg.addRoundedRectangle(r.getX(), r.getY(), r.getWidth(), r.getHeight(),
+                                   kRadius, kRadius, true, true, false, false);
+        else if (isLast)
+            bg.addRoundedRectangle(r.getX(), r.getY(), r.getWidth(), r.getHeight(),
+                                   kRadius, kRadius, false, false, true, true);
+        else
+            bg.addRectangle(r);
 
-    // Right edge separator
-    g.setColour(kBorder);
-    g.fillRect(juce::Rectangle<int>(labelPanel.getRight(), labelPanel.getY(), 1, labelPanel.getHeight()));
+        g.setColour(active ? ISOPalette::Hover : ISOPalette::RowBg);
+        g.fillPath(bg);
+    }
 
-    // LED indicator dot
-    const float dotDiam = 6.0f;
-    auto dotCol = waveColour.withAlpha(active ? 1.0f : 0.5f);
-    auto dotArea = labelPanel.removeFromLeft(22);
-    const auto dotCentre = dotArea.getCentre().toFloat();
-    g.setColour(dotCol);
-    g.fillEllipse(dotCentre.x - dotDiam * 0.5f, dotCentre.y - dotDiam * 0.5f,
-                  dotDiam, dotDiam);
-    // Glow ring
-    g.setColour(dotCol.withAlpha(active ? 0.22f : 0.10f));
-    g.fillEllipse(dotCentre.x - dotDiam, dotCentre.y - dotDiam,
-                  dotDiam * 2.0f, dotDiam * 2.0f);
+    // Color strip — full height of trackbar
+    const float stripX = (float)(bounds.getX() + kIconCol + 2);
+    g.setColour(waveColour.withAlpha(active ? 0.9f : 0.6f));
+    g.fillRect(stripX, (float)bounds.getY(),
+               (float)kColorStrip, (float)bounds.getHeight());
 
-    // Label text (ALL CAPS, Inter)
-    g.setColour(active ? kText : kText.withAlpha(0.72f));
-    g.setFont(ISOLookAndFeel::font(11.f, true));
-    g.drawText(label.toUpperCase(), labelPanel.reduced(0, 4),
-               juce::Justification::centredLeft);
+    // Waveform area
+    auto waveArea = bounds;
+    waveArea.removeFromLeft(kIconCol + kColorStrip + 4);
 
-    // ── Waveform display (inset "screen") ─────────────────────────────────────
-    auto waveOuter = bounds.reduced(5, 6);
-    g.setColour(kBg);
-    g.fillRoundedRectangle(waveOuter.toFloat(), 2.0f);
-    g.setColour(kBorder);
-    g.drawRoundedRectangle(waveOuter.toFloat().reduced(0.5f), 2.0f, 1.0f);
-    auto waveR = waveOuter.reduced(3, 3);
+    auto waveR = waveArea.reduced(10, 6);
 
     if (thumb.getTotalLength() > 0.0)
     {
-        g.setColour(waveColour.withAlpha(active ? 0.92f : 0.62f));
+        g.setColour(waveColour.withAlpha(active ? 0.75f : 0.45f));
         thumb.drawChannels(g, waveR, 0.0, thumb.getTotalLength(), 1.0f);
 
-        if (draggable)
-        {
-            g.setColour(kMuted.withAlpha(0.65f));
-            g.setFont(ISOLookAndFeel::font(8.5f, true));
-            auto hintR = waveR.withHeight(12).withY(waveR.getBottom() - 12);
-            g.drawText("DRAG TO DAW", hintR.withTrimmedLeft(hintR.getWidth() - 82),
-                       juce::Justification::centredRight);
-        }
+        g.setColour(waveColour.withAlpha(0.12f));
+        g.fillRect(waveR.getX(), waveR.getCentreY(), waveR.getWidth(), 1);
     }
     else
     {
-        g.setColour(kMuted.withAlpha(0.45f));
-        g.setFont(ISOLookAndFeel::font(10.5f, true));
+        g.setColour(ISOPalette::MutedLt.withAlpha(0.3f));
+        g.setFont(ISOLookAndFeel::font(10.f, false));
         g.drawText("NO AUDIO", waveR, juce::Justification::centred);
+    }
+
+    // Track label — on top of waveform, top-left
+    {
+        const float labelX = (float)waveArea.getX() + 10.f;
+        const float labelY = (float)waveArea.getY() + 5.f;
+        g.setColour(juce::Colours::white);
+        g.setFont(ISOLookAndFeel::font(12.f, false));
+        g.drawText(label, juce::Rectangle<float>(labelX, labelY, 80.f, 16.f),
+                   juce::Justification::centredLeft);
     }
 }
 
@@ -540,7 +822,6 @@ void ISODrumsAudioProcessorEditor::loadFile(const juce::File& file)
     currentFile_    = file;
     inputFileName_  = file.getFileNameWithoutExtension();
 
-    // Load full buffer into memory
     const int numSamples = static_cast<int>(reader->lengthInSamples);
     juce::AudioBuffer<float> buf(static_cast<int>(reader->numChannels), numSamples);
     reader->read(&buf, 0, numSamples, 0, true, true);
@@ -551,18 +832,15 @@ void ISODrumsAudioProcessorEditor::loadFile(const juce::File& file)
         audioProcessor_.inputSampleRate = reader->sampleRate;
     }
 
-    // Detach old source before resetting unique_ptr
     audioProcessor_.activeTransport.store(nullptr);
     audioProcessor_.transportInput.setSource(nullptr);
     inputSource_.reset();
 
-    // New playback source
     inputSource_ = std::make_unique<juce::AudioFormatReaderSource>(reader, true);
     audioProcessor_.transportInput.setSource(
         inputSource_.get(), 0, nullptr,
         reader->sampleRate, static_cast<int>(reader->numChannels));
 
-    // Waveform thumbnail
     thumbInput_.setSource(new juce::FileInputSource(file));
 
     fileLoaded_ = true;
@@ -570,8 +848,7 @@ void ISODrumsAudioProcessorEditor::loadFile(const juce::File& file)
     soloStemIndex_ = -1;
 
     separateButton_.setEnabled(audioProcessor_.getEngine().isReady());
-    playButtons_[0].setEnabled(true);
-    playButtons_[0].setColour(juce::TextButton::buttonColourId, kRowColours[0]);
+    soloButtons_[0].setEnabled(true);
 
     repaint();
 }
@@ -588,7 +865,6 @@ void ISODrumsAudioProcessorEditor::startSeparation()
     exportWavsButton_.setEnabled(false);
     exportMidiButton_.setEnabled(false);
     progressValue_ = 0.0;
-    progressBar_.setVisible(true);
 
     setSolo(-1);
     separationThread_.startThread();
@@ -602,22 +878,14 @@ void ISODrumsAudioProcessorEditor::onSeparationComplete()
     stemsDone_ = true;
     separateButton_.setEnabled(true);
     exportWavsButton_.setEnabled(true);
-    exportWavsButton_.setColour(juce::TextButton::buttonColourId, kAccent);
     exportMidiButton_.setEnabled(true);
-    exportMidiButton_.setColour(juce::TextButton::buttonColourId, kAccent);
 
-    for (int i = 1; i < kNumRows; ++i)
+    for (int i = 0; i < kNumRows; ++i)
     {
-        playButtons_[i].setEnabled(true);
-        playButtons_[i].setColour(juce::TextButton::buttonColourId, kRowColours[i]);
-    }
-    for (int i = 0; i < 5; ++i)
-    {
+        soloButtons_[i].setEnabled(true);
         saveButtons_[i].setEnabled(true);
-        saveButtons_[i].setColour(juce::TextButton::buttonColourId, kSurface);
     }
 
-    progressBar_.setVisible(false);
     repaint();
 }
 
@@ -641,7 +909,6 @@ void ISODrumsAudioProcessorEditor::updateStemThumbnails()
 
 void ISODrumsAudioProcessorEditor::attachStemSources()
 {
-    // Detach existing sources first
     audioProcessor_.transportKick   .setSource(nullptr);
     audioProcessor_.transportSnare  .setSource(nullptr);
     audioProcessor_.transportToms   .setSource(nullptr);
@@ -678,7 +945,6 @@ void ISODrumsAudioProcessorEditor::attachStemSources()
 
 void ISODrumsAudioProcessorEditor::setSolo(int stemIndex)
 {
-    // Stop whatever was playing
     if (auto* t = audioProcessor_.activeTransport.load())
     {
         t->stop();
@@ -725,7 +991,7 @@ void ISODrumsAudioProcessorEditor::showExportLimitMessage(bool isWav)
     {
         title = "Trial Expired";
         msg   = "Your 14-day trial has expired.\n\n"
-                "Click \"License...\" to activate ISO Drums and unlock unlimited exports.";
+                "Open Settings to activate ISO Drums and unlock unlimited exports.";
     }
     else
     {
@@ -733,7 +999,7 @@ void ISODrumsAudioProcessorEditor::showExportLimitMessage(bool isWav)
         msg   = juce::String("You have used all ")
               + (isWav ? juce::String(LicenseManager::kMaxWavExports) + " trial WAV exports."
                        : juce::String(LicenseManager::kMaxMidiExports) + " trial MIDI exports.")
-              + "\n\nClick \"License...\" to activate ISO Drums and unlock unlimited exports.";
+              + "\n\nOpen Settings to activate ISO Drums and unlock unlimited exports.";
     }
     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, title, msg);
 }
@@ -791,10 +1057,10 @@ void ISODrumsAudioProcessorEditor::showLicenseDialog()
 
     juce::DialogWindow::LaunchOptions opts;
     opts.content.setOwned(content);
-    opts.dialogTitle             = "ISO Drums License";
-    opts.dialogBackgroundColour  = juce::Colour(0xff1e1e38);
+    opts.dialogTitle             = "ISO Drums — Settings";
+    opts.dialogBackgroundColour  = ISOPalette::Dark;
     opts.componentToCentreAround = this;
-    opts.useNativeTitleBar       = false;
+    opts.useNativeTitleBar       = true;
     opts.resizable               = false;
     opts.launchAsync();
 }
@@ -811,9 +1077,9 @@ void ISODrumsAudioProcessorEditor::showMidiDialog()
     juce::DialogWindow::LaunchOptions opts;
     opts.content.setOwned(content);
     opts.dialogTitle              = "Export MIDI";
-    opts.dialogBackgroundColour   = juce::Colour(0xff1e1e38);
+    opts.dialogBackgroundColour   = ISOPalette::Dark;
     opts.componentToCentreAround  = this;
-    opts.useNativeTitleBar        = false;
+    opts.useNativeTitleBar        = true;
     opts.resizable                = false;
     opts.launchAsync();
 }
@@ -945,19 +1211,24 @@ void ISODrumsAudioProcessorEditor::mouseDrag(const juce::MouseEvent& e)
     int row = dragSourceRow_;
     dragSourceRow_ = -1;
 
+    isDraggingOut_ = true;
+
     if (row == 0 && currentFile_.existsAsFile())
     {
         juce::DragAndDropContainer::performExternalDragDropOfFiles(
             { currentFile_.getFullPathName() }, false, this);
-        return;
+    }
+    else
+    {
+        auto tempFile = writeStemToTempFile(row);
+        if (tempFile != juce::File())
+        {
+            juce::DragAndDropContainer::performExternalDragDropOfFiles(
+                { tempFile.getFullPathName() }, false, this);
+        }
     }
 
-    auto tempFile = writeStemToTempFile(row);
-    if (tempFile != juce::File())
-    {
-        juce::DragAndDropContainer::performExternalDragDropOfFiles(
-            { tempFile.getFullPathName() }, false, this);
-    }
+    isDraggingOut_ = false;
 }
 
 void ISODrumsAudioProcessorEditor::mouseMove(const juce::MouseEvent& e)
@@ -992,6 +1263,6 @@ bool ISODrumsAudioProcessorEditor::isInterestedInFileDrag(const juce::StringArra
 
 void ISODrumsAudioProcessorEditor::filesDropped(const juce::StringArray& files, int, int)
 {
-    if (files.isEmpty()) return;
+    if (files.isEmpty() || isDraggingOut_) return;
     loadFile(juce::File(files[0]));
 }

@@ -7,7 +7,7 @@
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = process.env.FROM_EMAIL ?? 'ISO Drums <licenses@isodrums.com>';
+const FROM   = process.env.FROM_EMAIL ?? 'ISO Drums <licenses@plaitaudio.com>';
 
 /**
  * Send the license key delivery email after a successful purchase.
@@ -65,7 +65,7 @@ export async function sendLicenseEmail({ to, licenseKey, orderId }) {
       <div class="step">
         <div class="num">1</div>
         <p style="margin:0">Open <strong style="color:#e8e8f0">ISO Drums</strong> (download from
-          <a href="https://isodrums.com/#download">isodrums.com</a> if you haven't already).</p>
+          <a href="https://plaitaudio.com/iso-drums#download">plaitaudio.com</a> if you haven't already).</p>
       </div>
       <div class="step">
         <div class="num">2</div>
@@ -79,12 +79,12 @@ export async function sendLicenseEmail({ to, licenseKey, orderId }) {
       <p style="margin-top:20px">
         Your license works on up to <strong style="color:#e8e8f0">2 machines</strong>.
         Questions? Reply to this email or visit
-        <a href="https://isodrums.com/support">isodrums.com/support</a>.
+        <a href="https://plaitaudio.com/support">plaitaudio.com/support</a>.
       </p>
     </div>
     <p class="foot">
       Order reference: ${orderId}<br>
-      © 2026 ISO Drums · <a href="https://isodrums.com/privacy">Privacy</a>
+      © 2026 Plait Audio · <a href="https://plaitaudio.com/privacy">Privacy</a>
     </p>
   </div>
 </body>
@@ -96,14 +96,14 @@ export async function sendLicenseEmail({ to, licenseKey, orderId }) {
       `License key: ${licenseKey}`,
       '',
       'How to activate:',
-      '1. Open ISO Drums (download from https://isodrums.com/#download if needed).',
+      '1. Open ISO Drums (download from https://plaitaudio.com/iso-drums#download if needed).',
       '2. Click the "License…" button in the top-right.',
       '3. Paste your key and click Activate.',
       '',
       'Your license works on up to 2 machines.',
       '',
       `Order reference: ${orderId}`,
-      '© 2026 ISO Drums',
+      '© 2026 Plait Audio',
     ].join('\n'),
   });
 }

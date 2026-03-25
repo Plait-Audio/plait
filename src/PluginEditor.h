@@ -37,7 +37,7 @@ public:
     void mouseMove(const juce::MouseEvent&) override;
 
 private:
-    // ---- Worker thread (combines Phases 4 + 5 threading) ----
+    // ---- Worker thread ----
     class SeparationThread : public juce::Thread
     {
     public:
@@ -59,12 +59,10 @@ private:
     // ---- Audio I/O helpers ----
     juce::AudioFormatManager formatManager_;
 
-    // Playback sources (editor owns these; transports in processor point to them)
     std::unique_ptr<juce::AudioFormatReaderSource> inputSource_;
     std::unique_ptr<juce::MemoryAudioSource>       kickSource_, snareSource_,
                                                     tomsSource_, hihatSource_, cymbalsSource_;
 
-    // Temp directory for WAV drag-out
     juce::File tempDir_;
     juce::String inputFileName_;
     juce::File   currentFile_;
@@ -82,17 +80,21 @@ private:
 
     // Header
     juce::TextButton loadButton_     { "Load" };
-    juce::TextButton licenseButton_  { "License..." };
+    juce::TextButton settingsButton_ { "" };
+
+    // Volume slider
+    juce::Slider volumeSlider_;
+    juce::Label  volumeLabel_;
 
     // Per-stem: [0]=input, [1]=kick, [2]=snare, [3]=toms, [4]=hihat, [5]=cymbals
     static constexpr int kNumRows = 6;
-    juce::TextButton playButtons_[kNumRows];
-    juce::TextButton saveButtons_[5];  // stems only (no save for input)
+    juce::TextButton soloButtons_[kNumRows];
+    juce::TextButton saveButtons_[kNumRows];
 
     // Toolbar
     juce::TextButton separateButton_  { "Separate" };
-    juce::TextButton exportWavsButton_{ "Export WAVs" };
-    juce::TextButton exportMidiButton_{ "Export MIDI..." };
+    juce::TextButton exportWavsButton_{ "WAV" };
+    juce::TextButton exportMidiButton_{ "MIDI" };
 
     // Progress
     double progressValue_ = 0.0;
@@ -101,12 +103,13 @@ private:
     // State
     bool fileLoaded_      = false;
     bool stemsDone_       = false;
-    int  soloStemIndex_   = -1;   // -1 = none; 0 = input, 1-5 = stems
+    int  soloStemIndex_   = -1;
 
     // ---- Layout helpers (computed in resized()) ----
     juce::Rectangle<int> rowBounds_[kNumRows];
     juce::Rectangle<int> waveformBounds_[kNumRows];
     juce::Rectangle<int> toolbarBounds_;
+    juce::Rectangle<int> footerBounds_;
 
     // ---- Helpers ----
     void loadFile(const juce::File& file);
@@ -114,7 +117,7 @@ private:
     void onSeparationComplete();
     void updateStemThumbnails();
     void attachStemSources();
-    void setSolo(int stemIndex);      // -1 = stop all
+    void setSolo(int stemIndex);
     void exportWavs();
     void showMidiDialog();
     void exportMidi(const MidiExportSettings& settings, const OnsetParams& params);
@@ -134,6 +137,7 @@ private:
     int  hitTestWaveformRow(juce::Point<int> pos) const;
 
     int dragSourceRow_ = -1;
+    bool isDraggingOut_ = false;
 
     void timerCallback() override;
 

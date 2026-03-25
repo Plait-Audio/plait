@@ -12,7 +12,7 @@
  *
  * Setup in LemonSqueezy dashboard:
  *   Settings → Webhooks → Add Webhook
- *     URL: https://isodrums.com/api/purchase
+ *     URL: https://plaitaudio.com/api/purchase
  *     Events: order_created
  *     Secret: <set LEMONSQUEEZY_WEBHOOK_SECRET in Vercel env>
  *

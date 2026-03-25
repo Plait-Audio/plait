@@ -9,14 +9,18 @@
 
 namespace ISOPalette
 {
-    static const juce::Colour Bg      { 0xff09090b };   // Plait deep background
-    static const juce::Colour Surface { 0xff131316 };   // Plait surface
-    static const juce::Colour RowBg   { 0xff1a1a1f };   // Plait elevated
-    static const juce::Colour Border  { 0xff2a2a2f };   // Plait border
-    static const juce::Colour Accent  { 0xffc9a96e };   // Plait gold
-    static const juce::Colour Muted   { 0xff5a5a5e };   // Plait text-muted
-    static const juce::Colour Text    { 0xffe8e4df };   // Plait warm off-white
-    static const juce::Colour TextDim { 0xff8a8a8e };   // Plait text-secondary
+    static const juce::Colour Bg       { 0xff09090b };   // deepest background
+    static const juce::Colour Darkest  { 0xff131316 };   // darkest surface
+    static const juce::Colour Dark     { 0xff232334 };   // dark (waveform bg, row bg)
+    static const juce::Colour Surface  { 0xff131316 };   // surface (toolbars, panels)
+    static const juce::Colour RowBg    { 0xff232334 };   // row/track background
+    static const juce::Colour Hover    { 0xff424264 };   // hover/selected state
+    static const juce::Colour Border   { 0xff2a2a2f };   // border
+    static const juce::Colour Accent   { 0xffc9a96e };   // Plait gold
+    static const juce::Colour Muted    { 0xff5a5a5e };   // text-muted
+    static const juce::Colour MutedLt  { 0xff707094 };   // lighter muted (processing text)
+    static const juce::Colour Text     { 0xffe8e4df };   // warm off-white
+    static const juce::Colour TextDim  { 0xff8a8a8e };   // text-secondary
 }
 
 // ── Custom LookAndFeel ─────────────────────────────────────────────────────────

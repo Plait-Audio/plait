@@ -9,13 +9,13 @@
 <!-- OpenGraph -->
 <meta property="og:title" content="ISO Drums — Drum stem separation for macOS">
 <meta property="og:description" content="Drop in a drum recording. Walk away with five clean stems and a MIDI file. Fully offline, Apple Silicon native.">
-<meta property="og:image" content="https://isodrums.com/Plait-opengraph.png">
+<meta property="og:image" content="https://plaitaudio.com/Plait-opengraph.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://isodrums.com">
+<meta property="og:url" content="https://plaitaudio.com/iso-drums">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://isodrums.com/Plait-opengraph.png">
+<meta name="twitter:image" content="https://plaitaudio.com/Plait-opengraph.png">
 
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -685,12 +685,11 @@
   .pricing-trial {
     display: block;
     margin-top: 14px;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
     color: var(--text-muted);
-    text-decoration: none;
-    transition: color 0.2s;
+    text-align: center;
   }
-  .pricing-trial:hover { color: var(--text-secondary); }
 
   /* ── ABOUT ────────────────────────────────────────────────── */
   .about-section {
@@ -890,9 +889,8 @@
     <a href="#how">How It Works</a>
     <a href="#stems">Stems</a>
     <a href="#specs">Specs</a>
-    <a href="#pricing">Pricing</a>
     <a href="#about">About</a>
-    <a href="#pricing" class="nav-cta">Download Trial</a>
+    <a href="#download" class="nav-cta">Download Beta</a>
   </div>
 </nav>
 
@@ -903,7 +901,7 @@
   <div class="hero-content">
     <div class="hero-badge">
       <span class="dot"></span>
-      macOS · Apple Silicon · Standalone + AU/VST3
+      Open Beta · macOS · Apple Silicon · Standalone + AU/VST3
     </div>
 
     <h1>ISO Drums</h1>
@@ -915,14 +913,14 @@
     </p>
 
     <div class="hero-actions">
-      <a href="#pricing" class="btn-primary">
+      <a href="https://www.dropbox.com/scl/fi/p0kemytqt8u56y28fnyv5/ISO-Drums-macOS-arm64-0.1.0.zip?rlkey=eu33ruwkyreuavxtkzh5d9btb&dl=1" class="btn-primary">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Download Free Trial
+        Download Free Beta
       </a>
       <a href="#how" class="btn-ghost">See How It Works</a>
     </div>
 
-    <p class="hero-note">14-day trial &nbsp;·&nbsp; No account required &nbsp;·&nbsp; One-time purchase</p>
+    <p class="hero-note">Free during open beta &nbsp;·&nbsp; No account required &nbsp;·&nbsp; macOS Apple Silicon</p>
 
     <div class="waveform-hero">
       <div class="waveform-hero-container">
@@ -1102,19 +1100,22 @@
   </div>
 </section>
 
-<!-- PRICING -->
-<section class="pricing-section" id="pricing">
+<!-- DOWNLOAD / BETA -->
+<section class="pricing-section" id="download">
   <div class="section-header reveal" style="text-align: center; margin-bottom: 48px;">
-    <div class="section-label">Pricing</div>
-    <h2 class="section-title">One tool. One price.</h2>
-    <p class="section-subtitle" style="margin: 10px auto 0;">No tiers. No subscriptions. No&nbsp;upsells.</p>
+    <div class="section-label">Open Beta</div>
+    <h2 class="section-title">Free while we're in beta.</h2>
+    <p class="section-subtitle" style="margin: 10px auto 0;">We're opening ISO Drums to early testers. Download it, break it, and tell us what you think. Pricing comes&nbsp;later.</p>
   </div>
 
   <div class="pricing-card reveal">
     <div class="pricing-product">ISO Drums</div>
-    <div class="pricing-tagline">Everything. Forever.</div>
-    <div class="pricing-amount"><span class="currency">$</span>29</div>
-    <div class="pricing-note">One-time purchase &nbsp;·&nbsp; License key by email</div>
+    <div class="pricing-tagline">Open Beta · v0.1.0</div>
+
+    <div style="margin: 28px 0 28px; padding: 20px; background: rgba(201,169,110,0.07); border: 1px solid rgba(201,169,110,0.18); border-radius: 12px; text-align: left;">
+      <div style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 10px;">Beta Program</div>
+      <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin: 0;">ISO Drums is in active development. The core separation engine, MIDI export, and drag-to-DAW workflow are fully functional. We're refining the UI and adding features based on feedback from real sessions. Download is free — no account, no&nbsp;strings.</p>
+    </div>
 
     <ul class="pricing-features">
       <li>Neural stem separation — all five voices</li>
@@ -1123,11 +1124,16 @@
       <li>Drag-to-DAW for all stems</li>
       <li>Standalone + AU + VST3</li>
       <li>Fully offline — runs on your machine</li>
-      <li>All future updates included</li>
     </ul>
 
-    <a href="#" class="pricing-btn">Buy ISO Drums — $29</a>
-    <a href="#" class="pricing-trial">Or start with a 14-day free trial →</a>
+    <a href="https://www.dropbox.com/scl/fi/p0kemytqt8u56y28fnyv5/ISO-Drums-macOS-arm64-0.1.0.zip?rlkey=eu33ruwkyreuavxtkzh5d9btb&dl=1" class="pricing-btn">
+      Download ISO Drums Beta
+    </a>
+    <span class="pricing-trial">macOS · Apple Silicon M1+ · 366&nbsp;MB · v0.1.0</span>
+    <p style="margin-top: 16px; font-size: 12px; color: var(--text-muted); line-height: 1.6; text-align: center;">
+      First launch: right-click <strong style="color: var(--text-secondary)">ISO Drums.app</strong> → Open.<br>
+      Drag AU/VST3 to <code style="font-family: var(--font-mono); font-size: 11px">/Library/Audio/Plug-Ins/</code> for DAW use.
+    </p>
   </div>
 </section>
 
@@ -1173,9 +1179,9 @@
     <span class="footer-brand-product">ISO Drums</span>
   </a>
   <div class="footer-links">
-    <a href="#">Download</a>
-    <a href="#">Support</a>
-    <a href="#">Contact</a>
+    <a href="#download">Download</a>
+    <a href="mailto:zach@allmannerofus.com">Support</a>
+    <a href="mailto:zach@allmannerofus.com">Contact</a>
   </div>
   <div class="footer-copy">&copy; 2026 Plait</div>
 </footer>
