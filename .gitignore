@@ -1,0 +1,19 @@
+build/
+dist/
+third_party/
+
+# Neural network model weights (distributed separately, not in repo)
+Resources/*.pt
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Editor
+*.user
+.vscode/
+.idea/
+
+# Python bytecode
+__pycache__/
+*.pyc

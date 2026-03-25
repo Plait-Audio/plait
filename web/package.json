@@ -1,0 +1,14 @@
+{
+  "name": "iso-drums-web",
+  "version": "1.0.0",
+  "description": "ISO Drums marketing site + serverless activation API",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vercel/kv": "^1.0.0",
+    "resend": "^3.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

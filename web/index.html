@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISO Drums — Drum stem separation for macOS</title>
+<meta name="description" content="ISO Drums separates any drum recording into five clean stems and exports a MIDI file. Runs fully local on Apple Silicon. No cloud, no subscription.">
+
+<!-- OpenGraph -->
+<meta property="og:title" content="ISO Drums — Drum stem separation for macOS">
+<meta property="og:description" content="Drop in a drum recording. Walk away with five clean stems and a MIDI file. Fully offline, Apple Silicon native.">
+<meta property="og:image" content="https://isodrums.com/Plait-opengraph.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://isodrums.com">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://isodrums.com/Plait-opengraph.png">
+
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep:        #09090B;
+    --bg-surface:     #131316;
+    --bg-elevated:    #1A1A1F;
+    --text-primary:   #E8E4DF;
+    --text-secondary: #8A8A8E;
+    --text-muted:     #5A5A5E;
+    --accent:         #C9A96E;
+    --accent-dim:     rgba(201,169,110,0.13);
+    --border:         #2A2A2F;
+    --border-subtle:  #1E1E23;
+    --kick:   #C45C5C;
+    --snare:  #C98A4A;
+    --toms:   #6B9E6B;
+    --hihat:  #5C8EC4;
+    --cymbal: #8A6EC9;
+    --font-display: 'Syne', sans-serif;
+    --font-body:    'DM Sans', sans-serif;
+    --font-mono:    'JetBrains Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ── NAV ─────────────────────────────────────────────────── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    padding: 18px 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(9,9,11,0);
+    backdrop-filter: blur(0px);
+    border-bottom: 1px solid transparent;
+    transition: background 0.4s, backdrop-filter 0.4s, border-color 0.4s;
+  }
+  nav.scrolled {
+    background: rgba(9,9,11,0.88);
+    backdrop-filter: blur(20px);
+    border-bottom-color: var(--border-subtle);
+  }
+
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+  .nav-logo img {
+    height: 22px;
+    width: auto;
+    display: block;
+    opacity: 0.92;
+  }
+  .nav-logo-sep {
+    width: 1px;
+    height: 14px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+  .nav-logo-product {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+  }
+  .nav-links a {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text-primary); }
+  .nav-cta {
+    padding: 9px 22px;
+    background: var(--text-primary);
+    color: var(--bg-deep) !important;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px !important;
+    letter-spacing: 0.2px;
+    transition: opacity 0.2s, transform 0.15s;
+  }
+  .nav-cta:hover { opacity: 0.88; transform: translateY(-1px); }
+
+  /* ── HERO ─────────────────────────────────────────────────── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 140px 48px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Photo background */
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background-image: url('hero-photo.png');
+    background-size: cover;
+    background-position: center 18%;
+    animation: heroBgZoom 9s ease-out forwards;
+    will-change: transform;
+  }
+  /* Layered overlay: gradient + vignette */
+  .hero-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 50% 50%, rgba(9,9,11,0.2) 30%, rgba(9,9,11,0.75) 100%),
+      linear-gradient(to bottom, rgba(9,9,11,0.68) 0%, rgba(9,9,11,0.28) 35%, rgba(9,9,11,0.78) 72%, rgba(9,9,11,1) 100%);
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    background: rgba(19,19,22,0.7);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+    margin-bottom: 32px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.2s;
+    backdrop-filter: blur(8px);
+  }
+  .hero-badge .dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: dotPulse 2.4s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 9.5vw, 100px);
+    font-weight: 800;
+    letter-spacing: -3px;
+    line-height: 0.9;
+    margin-bottom: 28px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.4s;
+    text-shadow: 0 2px 40px rgba(9,9,11,0.6);
+  }
+
+  .hero-sub {
+    font-size: 18px;
+    color: rgba(232,228,223,0.82);
+    max-width: 440px;
+    line-height: 1.7;
+    margin-bottom: 44px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.6s;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 18px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.8s;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 30px;
+    background: var(--text-primary);
+    color: var(--bg-deep);
+    border: none;
+    border-radius: 10px;
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.2s, transform 0.15s;
+  }
+  .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 30px;
+    background: rgba(19,19,22,0.5);
+    color: var(--text-primary);
+    border: 1px solid rgba(42,42,47,0.8);
+    border-radius: 10px;
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    backdrop-filter: blur(8px);
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .btn-ghost:hover {
+    background: rgba(26,26,31,0.7);
+    border-color: var(--text-muted);
+  }
+
+  .hero-note {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(90,90,94,0.9);
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 1s;
+    margin-bottom: 56px;
+  }
+
+  /* ── WAVEFORM VIZ ─────────────────────────────────────────── */
+  .waveform-hero {
+    width: 100%;
+    max-width: 680px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 1.2s;
+    position: relative;
+    z-index: 1;
+  }
+  .waveform-hero-container {
+    background: rgba(19,19,22,0.85);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 28px;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+  }
+  .waveform-hero-container::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.35;
+    animation: accentLineSweep 4s ease-in-out infinite;
+  }
+  .waveform-hero-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .waveform-hero-header .left {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .waveform-hero-header .right {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .waveform-tracks { display: flex; flex-direction: column; gap: 5px; }
+  .waveform-track  { display: flex; align-items: center; gap: 14px; padding: 4px 0; }
+  .track-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    width: 48px;
+    flex-shrink: 0;
+    text-align: right;
+  }
+  .track-bars {
+    display: flex;
+    align-items: center;
+    gap: 1.5px;
+    height: 28px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .track-bar { width: 2px; border-radius: 1px; transition: height 0.4s ease; }
+  .track-controls { display: flex; gap: 5px; flex-shrink: 0; }
+  .track-btn {
+    width: 24px; height: 24px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .track-btn:hover { border-color: var(--text-muted); }
+
+  /* ── SECTION BASE ─────────────────────────────────────────── */
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 3.8vw, 44px);
+    font-weight: 700;
+    letter-spacing: -1.5px;
+    margin-bottom: 12px;
+    line-height: 1.08;
+  }
+  .section-subtitle {
+    font-size: 16px;
+    color: var(--text-secondary);
+    max-width: 420px;
+    line-height: 1.7;
+  }
+  .section-header { margin-bottom: 52px; }
+
+  /* ── HOW IT WORKS ─────────────────────────────────────────── */
+  .how-section {
+    padding: 120px 48px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .steps-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    counter-reset: step;
+  }
+  .step-card {
+    padding: 34px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    counter-increment: step;
+    transition: border-color 0.3s, transform 0.3s;
+    position: relative;
+  }
+  .step-card:hover { border-color: var(--text-muted); transform: translateY(-2px); }
+  .step-card::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--font-display);
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--bg-elevated);
+    line-height: 1;
+    margin-bottom: 22px;
+    display: block;
+  }
+  .step-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    letter-spacing: -0.3px;
+  }
+  .step-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+  .step-detail {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+    line-height: 1.7;
+  }
+
+  /* Stagger step cards */
+  .steps-grid .step-card:nth-child(1) { transition-delay: 0.05s; }
+  .steps-grid .step-card:nth-child(2) { transition-delay: 0.12s; }
+  .steps-grid .step-card:nth-child(3) { transition-delay: 0.18s; }
+
+  /* ── FEATURES ─────────────────────────────────────────────── */
+  .features-section {
+    padding: 40px 48px 120px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .features-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .feature-card {
+    padding: 34px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+  .feature-card:hover { border-color: var(--text-muted); transform: translateY(-2px); }
+  .feature-icon {
+    width: 38px; height: 38px;
+    border-radius: 9px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+    font-size: 18px;
+  }
+  .feature-title {
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+  .feature-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  /* Stagger feature cards */
+  .features-grid .feature-card:nth-child(1) { transition-delay: 0.04s; }
+  .features-grid .feature-card:nth-child(2) { transition-delay: 0.10s; }
+  .features-grid .feature-card:nth-child(3) { transition-delay: 0.04s; }
+  .features-grid .feature-card:nth-child(4) { transition-delay: 0.10s; }
+  .features-grid .feature-card:nth-child(5) { transition-delay: 0.04s; }
+  .features-grid .feature-card:nth-child(6) { transition-delay: 0.10s; }
+
+  /* ── STEM STRIP ───────────────────────────────────────────── */
+  .stem-section {
+    padding: 0 48px 120px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .stem-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .stem-card {
+    padding: 26px 22px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+  .stem-card:hover { border-color: var(--text-muted); transform: translateY(-2px); }
+  .stem-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    transition: opacity 0.3s;
+  }
+  .stem-card:hover::before { opacity: 0.8; }
+  .stem-card.kick::before   { background: var(--kick); }
+  .stem-card.snare::before  { background: var(--snare); }
+  .stem-card.toms::before   { background: var(--toms); }
+  .stem-card.hihat::before  { background: var(--hihat); }
+  .stem-card.cymbal::before { background: var(--cymbal); }
+  .stem-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .stem-card.kick   .stem-name { color: var(--kick); }
+  .stem-card.snare  .stem-name { color: var(--snare); }
+  .stem-card.toms   .stem-name { color: var(--toms); }
+  .stem-card.hihat  .stem-name { color: var(--hihat); }
+  .stem-card.cymbal .stem-name { color: var(--cymbal); }
+  .stem-mini-wave {
+    display: flex;
+    align-items: center;
+    gap: 1.5px;
+    height: 30px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .stem-mini-bar { width: 2px; border-radius: 1px; opacity: 0.65; }
+  .stem-note { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+
+  /* ── SPECS ────────────────────────────────────────────────── */
+  .specs-section {
+    padding: 80px 48px 120px;
+    max-width: 1100px;
+    margin: 0 auto;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .specs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .spec-group {
+    padding: 30px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .spec-group h3 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 18px;
+  }
+  .spec-list {
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 2.2;
+  }
+
+  /* ── PRICING ──────────────────────────────────────────────── */
+  .pricing-section {
+    padding: 120px 48px;
+    text-align: center;
+    position: relative;
+  }
+  .pricing-section::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 650px; height: 650px;
+    background: radial-gradient(circle, var(--accent-dim) 0%, transparent 65%);
+    filter: blur(80px);
+    pointer-events: none;
+  }
+  .pricing-card {
+    max-width: 460px;
+    margin: 0 auto;
+    padding: 48px 44px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    position: relative;
+    z-index: 1;
+    transition: border-color 0.4s;
+  }
+  .pricing-card:hover { border-color: rgba(201,169,110,0.25); }
+  .pricing-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: accentLinePulse 3.5s ease-in-out infinite;
+  }
+  .pricing-product {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 5px;
+  }
+  .pricing-tagline {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 34px;
+  }
+  .pricing-amount {
+    font-family: var(--font-display);
+    font-size: 62px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .pricing-amount .currency {
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    vertical-align: super;
+    margin-right: 2px;
+  }
+  .pricing-note {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 34px;
+  }
+  .pricing-features {
+    list-style: none;
+    text-align: left;
+    margin-bottom: 34px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .pricing-features li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .pricing-features li:last-child { border-bottom: none; }
+  .pricing-features li::before {
+    content: '';
+    width: 5px; height: 5px;
+    background: var(--accent);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .pricing-btn {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    background: var(--accent);
+    color: var(--bg-deep);
+    border: none;
+    border-radius: 12px;
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+    transition: opacity 0.2s, transform 0.15s;
+  }
+  .pricing-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+  .pricing-trial {
+    display: block;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .pricing-trial:hover { color: var(--text-secondary); }
+
+  /* ── ABOUT ────────────────────────────────────────────────── */
+  .about-section {
+    padding: 120px 48px;
+    max-width: 1100px;
+    margin: 0 auto;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .about-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: start;
+  }
+  .about-logo {
+    margin-bottom: 28px;
+    opacity: 0.88;
+  }
+  .about-logo img { height: 26px; width: auto; }
+  .about-left h2 {
+    font-family: var(--font-display);
+    font-size: clamp(30px, 3.6vw, 46px);
+    font-weight: 700;
+    letter-spacing: -1.5px;
+    line-height: 1.05;
+    margin-bottom: 26px;
+  }
+  .about-left p {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.78;
+    margin-bottom: 18px;
+  }
+  .about-right {
+    display: flex;
+    flex-direction: column;
+    padding-top: 6px;
+  }
+  .about-value {
+    padding: 26px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .about-value:first-child { padding-top: 0; }
+  .about-value:last-child { border-bottom: none; padding-bottom: 0; }
+  .about-value-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 7px;
+  }
+  .about-value-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  /* ── BELIEF ───────────────────────────────────────────────── */
+  .belief-banner {
+    padding: 96px 48px;
+    text-align: center;
+    border-top: 1px solid var(--border-subtle);
+    position: relative;
+  }
+  .belief-banner::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 1px; height: 44px;
+    background: var(--accent);
+    opacity: 0.35;
+  }
+  .belief-banner p {
+    font-family: var(--font-display);
+    font-size: clamp(20px, 3.2vw, 30px);
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.38;
+    color: var(--text-secondary);
+  }
+
+  /* ── FOOTER ───────────────────────────────────────────────── */
+  footer {
+    padding: 40px 48px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+  .footer-brand img { height: 18px; width: auto; opacity: 0.7; }
+  .footer-brand-sep {
+    width: 1px; height: 12px;
+    background: var(--border);
+  }
+  .footer-brand-product {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-links a {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--text-secondary); }
+  .footer-copy {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ── ANIMATIONS ───────────────────────────────────────────── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes heroBgZoom {
+    from { transform: scale(1.06); }
+    to   { transform: scale(1.0); }
+  }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(201,169,110,0.4); }
+    50%       { opacity: 0.5; box-shadow: 0 0 0 4px rgba(201,169,110,0); }
+  }
+  @keyframes accentLinePulse {
+    0%, 100% { opacity: 0.45; }
+    50%       { opacity: 0.85; }
+  }
+  @keyframes accentLineSweep {
+    0%   { opacity: 0.2; background-position: -100% 0; }
+    50%  { opacity: 0.5; }
+    100% { opacity: 0.2; background-position: 100% 0; }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── RESPONSIVE ───────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    nav { padding: 14px 20px; }
+    .nav-links a:not(.nav-cta) { display: none; }
+    .hero { padding: 110px 20px 60px; }
+    .hero h1 { letter-spacing: -2px; }
+    .hero-sub { font-size: 16px; }
+    .hero-actions { flex-direction: column; width: 100%; }
+    .hero-actions .btn-primary,
+    .hero-actions .btn-ghost { width: 100%; justify-content: center; }
+    .waveform-hero { margin: 0 -4px; }
+    .waveform-hero-container { padding: 18px 16px; border-radius: 12px; }
+    .track-controls { display: none; }
+    .steps-grid,
+    .specs-grid,
+    .stem-strip,
+    .features-grid { grid-template-columns: 1fr; }
+    .stem-strip { grid-template-columns: 1fr 1fr; }
+    .how-section,
+    .features-section,
+    .stem-section,
+    .specs-section,
+    .about-section { padding: 72px 20px; }
+    .about-grid { grid-template-columns: 1fr; gap: 44px; }
+    .pricing-section { padding: 72px 20px; }
+    .pricing-card { padding: 36px 28px; }
+    footer { flex-direction: column; gap: 22px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="#" class="nav-logo">
+    <img src="logo-plait-horiz-white.png" alt="Plait">
+    <span class="nav-logo-sep"></span>
+    <span class="nav-logo-product">ISO Drums</span>
+  </a>
+  <div class="nav-links">
+    <a href="#how">How It Works</a>
+    <a href="#stems">Stems</a>
+    <a href="#specs">Specs</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#about">About</a>
+    <a href="#pricing" class="nav-cta">Download Trial</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      macOS · Apple Silicon · Standalone + AU/VST3
+    </div>
+
+    <h1>ISO Drums</h1>
+
+    <p class="hero-sub">
+      Drop in a drum recording. Walk away with five
+      clean stems and a MIDI file — no cloud,
+      no account, no&nbsp;waiting.
+    </p>
+
+    <div class="hero-actions">
+      <a href="#pricing" class="btn-primary">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Download Free Trial
+      </a>
+      <a href="#how" class="btn-ghost">See How It Works</a>
+    </div>
+
+    <p class="hero-note">14-day trial &nbsp;·&nbsp; No account required &nbsp;·&nbsp; One-time purchase</p>
+
+    <div class="waveform-hero">
+      <div class="waveform-hero-container">
+        <div class="waveform-hero-header">
+          <span class="left">Separated Stems</span>
+          <span class="right">drum_take_03.wav &nbsp;·&nbsp; 118 BPM</span>
+        </div>
+        <div class="waveform-tracks" id="hero-waveform"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section" id="how">
+  <div class="section-header reveal">
+    <div class="section-label">How It Works</div>
+    <h2 class="section-title">Three steps. One window.</h2>
+    <p class="section-subtitle">No routing, no setup, no plugins to configure. The whole workflow lives in one&nbsp;place.</p>
+  </div>
+
+  <div class="steps-grid">
+    <div class="step-card reveal">
+      <div class="step-title">Drop your drums</div>
+      <div class="step-desc">Drag a stereo drum recording into the app or use the file picker. WAV, AIFF, FLAC, or MP3. Recorded live, sampled, or programmed — if there are drums in it, it&nbsp;works.</div>
+      <div class="step-detail">No format conversion &nbsp;·&nbsp; Drag and drop supported</div>
+    </div>
+
+    <div class="step-card reveal">
+      <div class="step-title">Five stems, separated</div>
+      <div class="step-desc">Five neural networks run locally and isolate kick, snare, toms, hi-hat, and cymbals into clean individual stems. No cloud. No queues. No uploading your unreleased music to a&nbsp;server.</div>
+      <div class="step-detail">U-Net architecture &nbsp;·&nbsp; Apple Silicon optimized &nbsp;·&nbsp; Fully&nbsp;offline</div>
+    </div>
+
+    <div class="step-card reveal">
+      <div class="step-title">Export stems + MIDI</div>
+      <div class="step-desc">Drag any stem directly from the app into your DAW track. Export MIDI with every hit detected, velocity intact, tempo auto-detected from the drums themselves. Five tracks, ready&nbsp;to&nbsp;use.</div>
+      <div class="step-detail">Type 1 MIDI &nbsp;·&nbsp; Channel 10 &nbsp;·&nbsp; GM drum mapping &nbsp;·&nbsp; Auto BPM</div>
+    </div>
+  </div>
+</section>
+
+<!-- FIVE STEMS -->
+<section class="stem-section" id="stems">
+  <div class="section-header reveal">
+    <div class="section-label">The Five Stems</div>
+    <h2 class="section-title">Every voice, separated.</h2>
+    <p class="section-subtitle">Each drum voice gets its own neural model, its own audio stem, and its own MIDI track. Color-coded across the app and every&nbsp;export.</p>
+  </div>
+
+  <div class="stem-strip">
+    <div class="stem-card kick reveal">
+      <div class="stem-name">Kick</div>
+      <div class="stem-mini-wave" id="wave-kick"></div>
+      <div class="stem-note">GM Note 36 &nbsp;·&nbsp; C1</div>
+    </div>
+    <div class="stem-card snare reveal">
+      <div class="stem-name">Snare</div>
+      <div class="stem-mini-wave" id="wave-snare"></div>
+      <div class="stem-note">GM Note 38 &nbsp;·&nbsp; D1</div>
+    </div>
+    <div class="stem-card toms reveal">
+      <div class="stem-name">Toms</div>
+      <div class="stem-mini-wave" id="wave-toms"></div>
+      <div class="stem-note">GM Note 47 &nbsp;·&nbsp; B1</div>
+    </div>
+    <div class="stem-card hihat reveal">
+      <div class="stem-name">Hi-Hat</div>
+      <div class="stem-mini-wave" id="wave-hihat"></div>
+      <div class="stem-note">GM Note 42 &nbsp;·&nbsp; F#1</div>
+    </div>
+    <div class="stem-card cymbal reveal">
+      <div class="stem-name">Cymbals</div>
+      <div class="stem-mini-wave" id="wave-cymbal"></div>
+      <div class="stem-note">GM Note 49 &nbsp;·&nbsp; C#2</div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features-section" id="features">
+  <div class="section-header reveal">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Built for the session.</h2>
+    <p class="section-subtitle">Every decision was made around one question: what actually slows&nbsp;you&nbsp;down?</p>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2L11 7H16L12 10.5L13.5 16L9 13L4.5 16L6 10.5L2 7H7L9 2Z" stroke="#C9A96E" stroke-width="1.2" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="feature-title">Neural stem separation</div>
+      <div class="feature-desc">Five dedicated U-Net models, each trained on a specific drum voice. The kick doesn't bleed into the snare because they're not sharing a&nbsp;model.</div>
+    </div>
+
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="3" stroke="#C9A96E" stroke-width="1.2"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4.1 4.1l1.4 1.4M12.5 12.5l1.4 1.4M4.1 13.9l1.4-1.4M12.5 5.5l1.4-1.4" stroke="#C9A96E" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="feature-title">Per-stem hit detection</div>
+      <div class="feature-desc">DSP onset detection runs on each separated stem individually. You get accurate timing and velocity per voice — not a guess about where a hit&nbsp;landed.</div>
+    </div>
+
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 12L12 6M14 4l-4 1 3 3-1 4-4-3L3 14" stroke="#C9A96E" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="feature-title">Drag to DAW</div>
+      <div class="feature-desc">Grab any stem waveform and drag it directly onto a track in Logic, Ableton, Pro Tools, or Reaper. No save-to-folder, no navigate-and-import. Matches how you actually&nbsp;work.</div>
+    </div>
+
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="12" rx="2" stroke="#C9A96E" stroke-width="1.2"/><path d="M7 9h4M9 7v4" stroke="#C9A96E" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="feature-title">Auto BPM detection</div>
+      <div class="feature-desc">Tempo is estimated directly from your drum hits after separation. The MIDI file exports with the correct BPM baked in — no manual entry, no alignment guesswork in your&nbsp;DAW.</div>
+    </div>
+
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2a7 7 0 100 14A7 7 0 009 2z" stroke="#C9A96E" stroke-width="1.2"/><path d="M9 6v3l2 2" stroke="#C9A96E" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="feature-title">Fully offline</div>
+      <div class="feature-desc">No cloud uploads, no server queues, no API keys, no subscription. Your recordings stay on your drive. Fast because it's local — not because we made you&nbsp;wait.</div>
+    </div>
+
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="5" width="6" height="8" rx="1.5" stroke="#C9A96E" stroke-width="1.2"/><rect x="10" y="5" width="6" height="8" rx="1.5" stroke="#C9A96E" stroke-width="1.2"/><path d="M8 9h2" stroke="#C9A96E" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="feature-title">Standalone + AU + VST3</div>
+      <div class="feature-desc">One download includes the standalone app, an Audio Unit, and a VST3 plugin. Use it outside your DAW for speed, inside for project integration. Same tool, both&nbsp;places.</div>
+    </div>
+  </div>
+</section>
+
+<!-- SPECS -->
+<section class="specs-section" id="specs">
+  <div class="section-header reveal">
+    <div class="section-label">Specifications</div>
+    <h2 class="section-title">The details.</h2>
+  </div>
+
+  <div class="specs-grid reveal">
+    <div class="spec-group">
+      <h3>System</h3>
+      <ul class="spec-list">
+        <li>macOS (arm64)</li>
+        <li>Apple Silicon M1 or newer</li>
+        <li>Standalone .app</li>
+        <li>AU component</li>
+        <li>VST3 plugin</li>
+      </ul>
+    </div>
+    <div class="spec-group">
+      <h3>Audio Input</h3>
+      <ul class="spec-list">
+        <li>WAV</li>
+        <li>AIFF / AIF</li>
+        <li>FLAC</li>
+        <li>MP3</li>
+        <li>Drag-and-drop or file picker</li>
+      </ul>
+    </div>
+    <div class="spec-group">
+      <h3>Output</h3>
+      <ul class="spec-list">
+        <li>5 separated audio stems</li>
+        <li>Type 1 MIDI file</li>
+        <li>5 tracks (one per drum voice)</li>
+        <li>Channel 10 · GM drum mapping</li>
+        <li>Velocity + timing preserved</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section" id="pricing">
+  <div class="section-header reveal" style="text-align: center; margin-bottom: 48px;">
+    <div class="section-label">Pricing</div>
+    <h2 class="section-title">One tool. One price.</h2>
+    <p class="section-subtitle" style="margin: 10px auto 0;">No tiers. No subscriptions. No&nbsp;upsells.</p>
+  </div>
+
+  <div class="pricing-card reveal">
+    <div class="pricing-product">ISO Drums</div>
+    <div class="pricing-tagline">Everything. Forever.</div>
+    <div class="pricing-amount"><span class="currency">$</span>29</div>
+    <div class="pricing-note">One-time purchase &nbsp;·&nbsp; License key by email</div>
+
+    <ul class="pricing-features">
+      <li>Neural stem separation — all five voices</li>
+      <li>Per-stem MIDI export with velocity</li>
+      <li>Auto BPM detection</li>
+      <li>Drag-to-DAW for all stems</li>
+      <li>Standalone + AU + VST3</li>
+      <li>Fully offline — runs on your machine</li>
+      <li>All future updates included</li>
+    </ul>
+
+    <a href="#" class="pricing-btn">Buy ISO Drums — $29</a>
+    <a href="#" class="pricing-trial">Or start with a 14-day free trial →</a>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section class="about-section" id="about">
+  <div class="about-grid">
+    <div class="about-left reveal">
+      <div class="about-logo">
+        <img src="logo-plait-horiz-white.png" alt="Plait">
+      </div>
+      <h2>Tools built by producers, for&nbsp;producers.</h2>
+      <p>Plait is a small audio software company focused on one thing: finding the problems in music production that nobody has solved yet, and building clean, practical tools for&nbsp;them.</p>
+      <p>Most plugin companies are chasing the same tones. We're more interested in the stuff that slows you down before you even get to the creative part — the friction you've learned to live with. That's where we&nbsp;work.</p>
+      <p>ISO Drums is the first tool. There's more&nbsp;coming.</p>
+    </div>
+    <div class="about-right">
+      <div class="about-value reveal">
+        <div class="about-value-title">Made Right.</div>
+        <div class="about-value-desc">No half-finished products. If it ships, it's solid. Every tool is intentional, built carefully, and does exactly what it says&nbsp;it&nbsp;does.</div>
+      </div>
+      <div class="about-value reveal">
+        <div class="about-value-title">Fair.</div>
+        <div class="about-value-desc">The industry takes more than it gives. Plait won't be part of that. One price, no subscriptions, no upsells, no&nbsp;gotchas.</div>
+      </div>
+      <div class="about-value reveal">
+        <div class="about-value-title">Accessible.</div>
+        <div class="about-value-desc">Whether you just opened a DAW for the first time or you've been producing for twenty years, the tools work for you. No gatekeeping, no&nbsp;pandering.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BELIEF -->
+<section class="belief-banner reveal">
+  <p>Nothing should stand between a creator<br>and the thing they're trying to&nbsp;make.</p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <a href="#" class="footer-brand">
+    <img src="logo-plait-horiz-white.png" alt="Plait">
+    <span class="footer-brand-sep"></span>
+    <span class="footer-brand-product">ISO Drums</span>
+  </a>
+  <div class="footer-links">
+    <a href="#">Download</a>
+    <a href="#">Support</a>
+    <a href="#">Contact</a>
+  </div>
+  <div class="footer-copy">&copy; 2026 Plait</div>
+</footer>
+
+<script>
+  // ── Nav scroll state ───────────────────────────────────────
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 48);
+  }, { passive: true });
+
+  // ── Reveal on scroll (staggered per section) ───────────────
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        const siblings = entry.target.parentElement
+          ? Array.from(entry.target.parentElement.querySelectorAll('.reveal'))
+          : [];
+        const idx = siblings.indexOf(entry.target);
+        const delay = idx > 0 ? idx * 90 : 0;
+        setTimeout(() => entry.target.classList.add('visible'), delay);
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.07 });
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+  // ── Seeded RNG for consistent waveforms ───────────────────
+  function makeRng(seed) {
+    let s = seed;
+    return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+  }
+
+  // ── Build waveform bars, animate them in on load ───────────
+  function buildBars(container, barCount, stemPattern, stemColor, animateIn, rng) {
+    const frag = document.createDocumentFragment();
+    const bars = [];
+    for (let i = 0; i < barCount; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'track-bar';
+      bar.style.backgroundColor = stemColor;
+      bar.style.opacity = '0.65';
+      const pos = i / barCount;
+      let h;
+      switch (stemPattern) {
+        case 'kick':  { const b = (pos * 8) % 2;          h = b < 0.14 ? 18 + rng()*11 : 1 + rng()*2; break; }
+        case 'snare': { const b = ((pos * 8) + 1) % 2;    h = b < 0.14 ? 14 + rng()*10 : 1 + rng()*2; break; }
+        case 'hihat': { const b = (pos * 18) % 1;          h = b < 0.12 ? 7  + rng()*8  : 1 + rng()*2; break; }
+        case 'toms':  { h = pos > 0.82 ? 5 + rng()*16 : 1 + rng()*1.5; break; }
+        case 'cymbal':{ h = pos < 0.04 || (pos > 0.5 && pos < 0.54) ? 10 + rng()*14 : 1 + rng()*3; break; }
+        default:      h = 3 + rng() * 14;
+      }
+      const targetH = Math.max(1, h);
+      bar.dataset.h = targetH;
+      bar.style.height = animateIn ? '0px' : targetH + 'px';
+      frag.appendChild(bar);
+      bars.push(bar);
+    }
+    container.appendChild(frag);
+    return bars;
+  }
+
+  function animateBarsIn(bars, baseDelay) {
+    bars.forEach((bar, i) => {
+      const delay = baseDelay + i * 3;
+      bar.style.transition = `height ${0.28 + Math.random() * 0.14}s ease ${delay}ms`;
+      setTimeout(() => { bar.style.height = bar.dataset.h + 'px'; }, delay);
+    });
+  }
+
+  // ── Hero waveform ──────────────────────────────────────────
+  function generateHeroWaveform() {
+    const container = document.getElementById('hero-waveform');
+    const isMobile = window.innerWidth < 768;
+    const barCount = isMobile ? 58 : 120;
+    const stems = [
+      { label: 'Kick',   color: '#C45C5C', pattern: 'kick',   seed: 42 },
+      { label: 'Snare',  color: '#C98A4A', pattern: 'snare',  seed: 49 },
+      { label: 'Toms',   color: '#6B9E6B', pattern: 'toms',   seed: 56 },
+      { label: 'Hi-Hat', color: '#5C8EC4', pattern: 'hihat',  seed: 63 },
+      { label: 'Cymbal', color: '#8A6EC9', pattern: 'cymbal', seed: 70 },
+    ];
+    const allBars = [];
+    stems.forEach((stem) => {
+      const rng = makeRng(stem.seed);
+      const track = document.createElement('div');
+      track.className = 'waveform-track';
+
+      const label = document.createElement('div');
+      label.className = 'track-label';
+      label.style.color = stem.color;
+      label.textContent = stem.label;
+
+      const barsEl = document.createElement('div');
+      barsEl.className = 'track-bars';
+      const bars = buildBars(barsEl, barCount, stem.pattern, stem.color, true, rng);
+      allBars.push(...bars);
+
+      if (!isMobile) {
+        const controls = document.createElement('div');
+        controls.className = 'track-controls';
+        ['S','M'].forEach((t, ti) => {
+          const btn = document.createElement('div');
+          btn.className = 'track-btn';
+          btn.innerHTML = `<svg viewBox="0 0 12 12" width="12" height="12"><text x="2" y="9" font-size="8" font-family="monospace" fill="${ti===0?stem.color:'#5A5A5E'}">${t}</text></svg>`;
+          controls.appendChild(btn);
+        });
+        track.appendChild(label);
+        track.appendChild(barsEl);
+        track.appendChild(controls);
+      } else {
+        track.appendChild(label);
+        track.appendChild(barsEl);
+      }
+      container.appendChild(track);
+    });
+
+    // Stagger animate in after hero animations load
+    setTimeout(() => animateBarsIn(allBars, 0), 1350);
+  }
+
+  // ── Mini stem waveforms ────────────────────────────────────
+  function generateMiniWave(id, color, pattern, seed) {
+    const container = document.getElementById(id);
+    if (!container) return;
+    const rng = makeRng(seed);
+    buildBars(container, 48, pattern, color, false, rng);
+  }
+
+  generateHeroWaveform();
+  generateMiniWave('wave-kick',   '#C45C5C', 'kick',   11);
+  generateMiniWave('wave-snare',  '#C98A4A', 'snare',  17);
+  generateMiniWave('wave-toms',   '#6B9E6B', 'toms',   23);
+  generateMiniWave('wave-hihat',  '#5C8EC4', 'hihat',  31);
+  generateMiniWave('wave-cymbal', '#8A6EC9', 'cymbal', 37);
+</script>
+
+</body>
+</html>

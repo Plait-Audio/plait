@@ -1,0 +1,54 @@
+ISO Drums — Installation Guide
+================================
+
+System Requirements
+-------------------
+  • macOS 12 Ventura or later (Apple Silicon / arm64)
+  • Audio host for AU/VST3 (Logic Pro, Ableton Live, Reaper, etc.)
+    — or use the standalone app, no DAW required
+
+Contents
+--------
+  ISO Drums.app          Standalone application
+  ISO Drums.component    Audio Unit (AU) plug-in
+  ISO Drums.vst3         VST3 plug-in
+
+Installation
+------------
+
+  Standalone:
+    Drag "ISO Drums.app" to your Applications folder (or anywhere you like).
+    Double-click to launch.
+
+  Audio Unit (AU):
+    Drag "ISO Drums.component" to:
+      ~/Library/Audio/Plug-Ins/Components/
+    Restart your DAW and re-scan plug-ins if needed.
+
+  VST3:
+    Drag "ISO Drums.vst3" to:
+      ~/Library/Audio/Plug-Ins/VST3/
+    Restart your DAW and re-scan plug-ins if needed.
+
+First Launch
+------------
+  ISO Drums starts in trial mode (14 days, 5 WAV + 5 MIDI exports).
+  Separation and playback are unlimited during the trial.
+
+  To activate a purchased license:
+    Menu → Enter License Key… → paste your key → Activate
+
+Usage
+-----
+  1. Drag an audio file onto the window (or click Load).
+  2. Click Separate — stems appear when processing is complete.
+  3. Solo any stem to preview it.
+  4. Click Export MIDI… to configure BPM, quantization, and note map.
+  5. Click Export WAVs to save all five stems to a folder.
+  6. Drag a stem waveform directly into a DAW track to export on the fly.
+
+Supported formats: WAV, AIFF, FLAC, MP3
+
+Support
+-------
+  https://isodrums.com/support
