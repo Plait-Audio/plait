@@ -6,8 +6,11 @@
 #   bash scripts/sign_and_package.sh [version]
 #
 # Environment variables (required for signed builds):
-#   CODESIGN_IDENTITY    — Developer ID Application certificate name
+#   CODESIGN_IDENTITY    — Developer ID cert name OR SHA-1 hash
 #                          e.g. "Developer ID Application: Your Name (TEAMID)"
+#                          or   "FD57D2490702A70FA0B6BDA0400851733930FEC4"
+#                          Using SHA-1 avoids "ambiguous" errors when the cert
+#                          exists in multiple keychains.
 #   NOTARIZE_PROFILE     — notarytool credentials profile name
 #                          (created via: xcrun notarytool store-credentials)
 #
@@ -26,6 +29,15 @@ DMG_PATH="${ROOT_DIR}/dist/${DIST_NAME}.dmg"
 
 IDENTITY="${CODESIGN_IDENTITY:-}"
 PROFILE="${NOTARIZE_PROFILE:-}"
+
+# If CODESIGN_IDENTITY looks like a name and is ambiguous, resolve to SHA-1
+if [[ -n "${IDENTITY}" && ! "${IDENTITY}" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+  HASH=$(security find-identity -v -p codesigning | grep "${IDENTITY}" | head -1 | awk '{print $2}')
+  if [[ -n "${HASH}" ]]; then
+    echo "▸ Resolved certificate to SHA-1: ${HASH}"
+    IDENTITY="${HASH}"
+  fi
+fi
 
 # ── Build ────────────────────────────────────────────────────────────────────
 echo "▸ Building ISO Drums ${VERSION}..."
