@@ -99,7 +99,7 @@ hdiutil create -volname "${DMG_VOLUME}" \
   -ov -format UDRW "${TEMP_DMG}"
 
 # Mount, add Applications symlink, unmount
-MOUNT_DIR=$(hdiutil attach -readwrite -noverify "${TEMP_DMG}" | tail -1 | awk '{print $3}')
+MOUNT_DIR=$(hdiutil attach -readwrite -noverify "${TEMP_DMG}" | tail -1 | cut -f3-)
 ln -sf /Applications "${MOUNT_DIR}/Applications"
 hdiutil detach "${MOUNT_DIR}" -quiet
 
