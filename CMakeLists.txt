@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(ISODrums VERSION 0.1.0)
+project(ISODrums VERSION 0.1.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,6 +50,8 @@ target_sources(ISODrums
         src/LicenseManager.h
         src/LicenseDialog.cpp
         src/LicenseDialog.h
+        src/AudioSettingsComponent.cpp
+        src/AudioSettingsComponent.h
         src/CustomStandaloneApp.cpp)
 
 target_compile_definitions(ISODrums

@@ -26,9 +26,9 @@ enum class LicenseState
 class LicenseManager
 {
 public:
-    static constexpr int kTrialDays        = 14;
-    static constexpr int kMaxWavExports    = 5;
-    static constexpr int kMaxMidiExports   = 5;
+    static constexpr int kTrialDays        = 30;
+    static constexpr int kMaxWavExports    = INT_MAX;
+    static constexpr int kMaxMidiExports   = INT_MAX;
     static constexpr int kOfflineGraceDays = 30;
 
     LicenseManager();

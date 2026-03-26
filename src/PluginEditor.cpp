@@ -160,7 +160,6 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     {
         juce::PopupMenu m;
         m.addItem(1, "Audio/MIDI Settings...");
-        m.addSeparator();
         m.addItem(2, "License...");
         m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&settingsButton_),
             [this](int result)
@@ -168,7 +167,16 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
                 if (result == 1)
                 {
                     if (auto* holder = juce::StandalonePluginHolder::getInstance())
-                        holder->showAudioSettingsDialog();
+                    {
+                        juce::DialogWindow::LaunchOptions o;
+                        o.content.setOwned (new AudioSettingsComponent (holder->deviceManager));
+                        o.dialogTitle                  = "Audio Settings";
+                        o.dialogBackgroundColour       = ISOPalette::Darkest;
+                        o.escapeKeyTriggersCloseButton = true;
+                        o.useNativeTitleBar            = true;
+                        o.resizable                    = false;
+                        o.launchAsync();
+                    }
                 }
                 else if (result == 2)
                 {
@@ -612,20 +620,17 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
         {
             case LicenseState::Trial:
             {
-                juce::String days  = juce::String(lm.trialDaysRemaining()) + " Days";
-                juce::String wavs  = juce::String(lm.wavExportsRemaining()) + " Wav";
-                juce::String midis = juce::String(lm.midiExportsRemaining()) + " Midi";
+                int daysLeft = lm.trialDaysRemaining();
+                juce::String days = juce::String(daysLeft) + (daysLeft == 1 ? " Day" : " Days");
 
-                g.setFont(ISOLookAndFeel::font(11.f));
-                float daysW  = g.getCurrentFont().getStringWidthFloat(days);
-                float wavsW  = g.getCurrentFont().getStringWidthFloat(wavs);
-                float midisW = g.getCurrentFont().getStringWidthFloat(midis);
                 g.setFont(ISOLookAndFeel::font(11.f, true));
                 float trialW = g.getCurrentFont().getStringWidthFloat("Trial");
+                g.setFont(ISOLookAndFeel::font(11.f));
+                float daysW  = g.getCurrentFont().getStringWidthFloat(days);
 
-                const float sep = 8.f;
+                const float sep  = 8.f;
                 const float barW = 6.f;
-                float totalW = trialW + barW + sep + daysW + barW + sep + wavsW + barW + sep + midisW;
+                float totalW = trialW + barW + sep + daysW;
                 float tx = textRight - totalW;
 
                 g.setColour(kAccent);
@@ -642,26 +647,6 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
                 g.setColour(kText);
                 g.setFont(ISOLookAndFeel::font(11.f));
                 g.drawText(days, juce::Rectangle<float>(tx, textY, daysW, textH),
-                           juce::Justification::centredLeft);
-                tx += daysW + sep * 0.5f;
-
-                g.setColour(kAccent.withAlpha(0.5f));
-                g.drawText("|", juce::Rectangle<float>(tx, textY, barW, textH),
-                           juce::Justification::centred);
-                tx += barW + sep * 0.5f;
-
-                g.setColour(kText);
-                g.drawText(wavs, juce::Rectangle<float>(tx, textY, wavsW, textH),
-                           juce::Justification::centredLeft);
-                tx += wavsW + sep * 0.5f;
-
-                g.setColour(kAccent.withAlpha(0.5f));
-                g.drawText("|", juce::Rectangle<float>(tx, textY, barW, textH),
-                           juce::Justification::centred);
-                tx += barW + sep * 0.5f;
-
-                g.setColour(kText);
-                g.drawText(midis, juce::Rectangle<float>(tx, textY, midisW, textH),
                            juce::Justification::centredLeft);
                 break;
             }
@@ -872,6 +857,8 @@ void ISODrumsAudioProcessorEditor::startSeparation()
 
 void ISODrumsAudioProcessorEditor::onSeparationComplete()
 {
+    progressValue_ = 1.0;  // guarantee 100% is shown before stems appear
+
     updateStemThumbnails();
     attachStemSources();
 
@@ -981,27 +968,13 @@ void ISODrumsAudioProcessorEditor::setSolo(int stemIndex)
 // Export
 // ============================================================================
 
-void ISODrumsAudioProcessorEditor::showExportLimitMessage(bool isWav)
+void ISODrumsAudioProcessorEditor::showExportLimitMessage(bool /*isWav*/)
 {
-    const auto& lm = audioProcessor_.getLicenseManager();
-    const auto state = lm.getState();
-
-    juce::String title, msg;
-    if (state == LicenseState::TrialExpired)
-    {
-        title = "Trial Expired";
-        msg   = "Your 14-day trial has expired.\n\n"
-                "Open Settings to activate ISO Drums and unlock unlimited exports.";
-    }
-    else
-    {
-        title = isWav ? "WAV Export Limit Reached" : "MIDI Export Limit Reached";
-        msg   = juce::String("You have used all ")
-              + (isWav ? juce::String(LicenseManager::kMaxWavExports) + " trial WAV exports."
-                       : juce::String(LicenseManager::kMaxMidiExports) + " trial MIDI exports.")
-              + "\n\nOpen Settings to activate ISO Drums and unlock unlimited exports.";
-    }
-    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, title, msg);
+    juce::AlertWindow::showMessageBoxAsync(
+        juce::MessageBoxIconType::WarningIcon,
+        "Trial Expired",
+        "Your 30-day trial has expired.\n\n"
+        "Open Settings to activate ISO Drums.");
 }
 
 void ISODrumsAudioProcessorEditor::exportWavs()
@@ -1057,7 +1030,7 @@ void ISODrumsAudioProcessorEditor::showLicenseDialog()
 
     juce::DialogWindow::LaunchOptions opts;
     opts.content.setOwned(content);
-    opts.dialogTitle             = "ISO Drums — Settings";
+    opts.dialogTitle             = "License";
     opts.dialogBackgroundColour  = ISOPalette::Dark;
     opts.componentToCentreAround = this;
     opts.useNativeTitleBar       = true;
@@ -1129,11 +1102,10 @@ void ISODrumsAudioProcessorEditor::exportMidi(const MidiExportSettings& settings
 
 void ISODrumsAudioProcessorEditor::timerCallback()
 {
-    if (audioProcessor_.separationRunning.load())
-    {
-        progressValue_ = static_cast<double>(audioProcessor_.separationProgress.load());
-        progressBar_.repaint();
-    }
+    // Always sync progress — gating on separationRunning caused a race where
+    // the thread set progress=1.0 then running=false before the next tick,
+    // so 100% was never rendered.
+    progressValue_ = static_cast<double>(audioProcessor_.separationProgress.load());
     repaint();
 }
 

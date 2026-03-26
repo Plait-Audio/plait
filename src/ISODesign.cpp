@@ -111,13 +111,13 @@ void ISOLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& btn,
     {
         const auto fill = down ? Border : (highlighted ? Surface.brighter(0.25f) : Surface);
         g.setColour(fill);
-        g.fillRoundedRectangle(bounds, 3.0f);
+        g.fillRoundedRectangle(bounds, 8.0f);
 
         const auto border = !btn.isEnabled() ? Border.darker(0.3f)
                           : highlighted      ? Border.brighter(0.7f)
                                              : Border;
         g.setColour(border);
-        g.drawRoundedRectangle(bounds, 3.0f, 1.0f);
+        g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
     }
 }
 

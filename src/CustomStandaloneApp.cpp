@@ -13,7 +13,7 @@ public:
     ISOStandaloneWindow (const juce::String& title,
                          juce::Colour bg,
                          juce::PropertySet* settings)
-        : StandaloneFilterWindow (title, bg, settings, false)
+        : StandaloneFilterWindow (title, bg, makeHolder (settings))
     {
         setUsingNativeTitleBar (true);
 
@@ -21,6 +21,38 @@ public:
             if (auto* btn = dynamic_cast<juce::TextButton*> (getChildComponent (i)))
                 if (btn->getButtonText() == "Options")
                     btn->setVisible (false);
+    }
+
+private:
+    // Build the plugin holder with 0 inputs / 2 outputs so that:
+    //   • macOS never switches Bluetooth devices into Hands-Free/SCO mode
+    //     (which would lock them to mono + 16 kHz)
+    //   • The Audio/MIDI settings dialog omits the Input, Feedback Loop,
+    //     and Active input channels rows entirely
+    static std::unique_ptr<juce::StandalonePluginHolder> makeHolder (juce::PropertySet* settings)
+    {
+        juce::Array<juce::StandalonePluginHolder::PluginInOuts> channels;
+        channels.add ({ 0, 2 }); // 0 inputs, 2 outputs (stereo)
+
+        auto holder = std::make_unique<juce::StandalonePluginHolder> (
+            settings,
+            false,    // don't take ownership of settings (app properties owns it)
+            "",       // no preferred device name
+            nullptr,  // no preferred setup options
+            channels);
+
+        // Safety net: if saved prefs had a sub-44100 Hz rate, bump it up.
+        // (Normally avoided by the 0-input fix above, but protects against
+        //  stale settings files written before this fix was applied.)
+        auto& dm    = holder->deviceManager;
+        auto  setup = dm.getAudioDeviceSetup();
+        if (setup.sampleRate < 44100.0)
+        {
+            setup.sampleRate = 44100.0;
+            dm.setAudioDeviceSetup (setup, true);
+        }
+
+        return holder;
     }
 };
 

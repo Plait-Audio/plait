@@ -9,7 +9,22 @@
 #include "MidiExporter.h"
 #include "MidiSettingsComponent.h"
 #include "LicenseDialog.h"
+#include "AudioSettingsComponent.h"
 #include "DrumMap.h"
+
+// ── Volume slider — Option+Click resets to 0 dB ──────────────────────────────
+class VolumeSlider : public juce::Slider
+{
+public:
+    using juce::Slider::Slider;
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isAltDown())
+            setValue (0.0, juce::sendNotification);
+        else
+            juce::Slider::mouseDown (e);
+    }
+};
 
 // ── Editor ────────────────────────────────────────────────────────────────────
 class ISODrumsAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -83,7 +98,7 @@ private:
     juce::TextButton settingsButton_ { "" };
 
     // Volume slider
-    juce::Slider volumeSlider_;
+    VolumeSlider volumeSlider_;
     juce::Label  volumeLabel_;
 
     // Per-stem: [0]=input, [1]=kick, [2]=snare, [3]=toms, [4]=hihat, [5]=cymbals
