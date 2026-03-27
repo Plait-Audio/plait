@@ -1427,7 +1427,7 @@ void ISODrumsAudioProcessorEditor::mouseDrag(const juce::MouseEvent& e)
         }
     }
 
-    isDraggingOut_ = false;
+    juce::Timer::callAfterDelay(500, [this] { isDraggingOut_ = false; });
 }
 
 void ISODrumsAudioProcessorEditor::mouseMove(const juce::MouseEvent& e)
@@ -1463,5 +1463,14 @@ bool ISODrumsAudioProcessorEditor::isInterestedInFileDrag(const juce::StringArra
 void ISODrumsAudioProcessorEditor::filesDropped(const juce::StringArray& files, int, int)
 {
     if (files.isEmpty() || isDraggingOut_) return;
-    loadFile(juce::File(files[0]));
+
+    juce::File dropped(files[0]);
+
+    if (currentFile_.existsAsFile() && dropped == currentFile_)
+        return;
+
+    if (tempDir_.isDirectory() && dropped.getParentDirectory() == tempDir_)
+        return;
+
+    loadFile(dropped);
 }
