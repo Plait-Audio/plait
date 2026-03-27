@@ -116,9 +116,8 @@ if gh release view "${TAG}" >/dev/null 2>&1; then
   gh release delete "${TAG}" --yes
 fi
 
-gh release create "${TAG}" \
-  --title "ISO Drums ${TAG}" \
-  --notes "$(cat <<NOTES
+NOTES_FILE=$(mktemp)
+cat > "${NOTES_FILE}" << NOTES
 ## ISO Drums ${TAG}
 
 macOS Apple Silicon (M1+) — Standalone App, AU & VST3
@@ -129,11 +128,16 @@ macOS Apple Silicon (M1+) — Standalone App, AU & VST3
 ### Installation
 1. Download the DMG below
 2. Open the DMG and drag **ISO Drums.app** to Applications
-3. Copy **ISO Drums.component** to \`~/Library/Audio/Plug-Ins/Components/\`
-4. Copy **ISO Drums.vst3** to \`~/Library/Audio/Plug-Ins/VST3/\`
+3. Copy **ISO Drums.component** to ~/Library/Audio/Plug-Ins/Components/
+4. Copy **ISO Drums.vst3** to ~/Library/Audio/Plug-Ins/VST3/
 NOTES
-)" \
+
+gh release create "${TAG}" \
+  --title "ISO Drums ${TAG}" \
+  --notes-file "${NOTES_FILE}" \
   "${DMG_PATH}"
+
+rm -f "${NOTES_FILE}"
 
 # Get the published asset URL
 DOWNLOAD_URL=$(gh release view "${TAG}" --json assets -q '.assets[] | select(.name | test("'"${DMG_NAME}"'")) | .browserDownloadUrl')
