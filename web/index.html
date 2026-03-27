@@ -869,12 +869,15 @@
     .hero-actions .btn-ghost { width: 100%; justify-content: center; }
     .hero-note { padding: 0 8px; text-align: center; }
 
+    /* Hide animated dot in hero badge on mobile */
+    .hero-badge .dot { display: none; }
+
     /* Waveform widget */
     .waveform-hero { width: 100%; margin: 0; min-width: 0; }
     .waveform-hero-container { padding: 18px 16px; border-radius: 12px; overflow: hidden; }
     .waveform-hero-header .right { display: none; }
-    .track-bars { overflow: hidden; }
-    .track-controls { display: none; }
+    .track-bars { overflow: hidden; flex: 1; }
+    .track-controls { display: flex; }
 
     /* Section padding */
     .how-section,
