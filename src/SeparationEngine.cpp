@@ -64,7 +64,8 @@ void SeparationEngine::loadModels()
 
 SeparationResult SeparationEngine::separate(const juce::AudioBuffer<float>& input,
                                              double sampleRate,
-                                             std::atomic<float>* progress) const
+                                             std::atomic<float>* progress,
+                                             float maskExponent) const
 {
     auto setProgress = [&](float v) { if (progress) progress->store(v); };
     setProgress(0.0f);
@@ -156,6 +157,12 @@ SeparationResult SeparationEngine::separate(const juce::AudioBuffer<float>& inpu
             c10::InferenceMode guard(true);
             mask = torch::squeeze(job.model->forward(iValues).toTensor(), 0);
         }
+
+        // Apply mask exponent for isolation control:
+        //   >1.0 sharpens (more isolation, more artifacts)
+        //   <1.0 softens  (less isolation, fewer artifacts)
+        if (std::abs(maskExponent - 1.0f) > 0.001f)
+            mask = mask.pow(maskExponent);
 
         // ISTFT immediately (while tensor is still hot in cache)
         torch::Tensor waveform = utils_.batchIstft(mask, phase, numSamples);

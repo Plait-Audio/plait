@@ -68,6 +68,7 @@ private:
 
     // ---- Core ----
     ISOLookAndFeel          lookAndFeel_;
+    juce::TooltipWindow     tooltipWindow_ { this, 500 };
     ISODrumsAudioProcessor& audioProcessor_;
     SeparationThread        separationThread_;
 
@@ -94,7 +95,7 @@ private:
     // ---- UI components ----
 
     // Header
-    juce::TextButton loadButton_     { "Load" };
+    juce::TextButton loadButton_     { "Load Track" };
     juce::TextButton settingsButton_ { "" };
 
     // Volume slider
@@ -111,6 +112,10 @@ private:
     juce::TextButton exportWavsButton_{ "WAV" };
     juce::TextButton exportMidiButton_{ "MIDI" };
 
+    // Isolation amount (mask exponent): 1.0 = default
+    juce::Slider isolationSlider_;
+    juce::Label  isolationLabel_;
+
     // Progress
     double progressValue_ = 0.0;
     juce::ProgressBar progressBar_ { progressValue_ };
@@ -119,6 +124,7 @@ private:
     bool fileLoaded_      = false;
     bool stemsDone_       = false;
     int  soloStemIndex_   = -1;
+    double playheadPos_   = 0.0;  // normalized 0..1 across the loaded audio
 
     // ---- Layout helpers (computed in resized()) ----
     juce::Rectangle<int> rowBounds_[kNumRows];
@@ -128,6 +134,7 @@ private:
 
     // ---- Helpers ----
     void loadFile(const juce::File& file);
+    void clearAll();
     void startSeparation();
     void onSeparationComplete();
     void updateStemThumbnails();
@@ -145,7 +152,8 @@ private:
                           juce::AudioThumbnail& thumb,
                           juce::Colour waveColour,
                           bool active,
-                          bool draggable) const;
+                          bool draggable,
+                          double playheadNorm) const;
 
     juce::File writeStemToTempFile(int rowIndex);
     bool rowHasAudio(int rowIndex) const;

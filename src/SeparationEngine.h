@@ -29,10 +29,13 @@ public:
 
     /** Runs separation on a stereo input buffer.
      *  Blocks until inference is complete -- call from a worker thread.
-     *  If progress is non-null, it is updated in [0, 1] as each stage completes. */
+     *  If progress is non-null, it is updated in [0, 1] as each stage completes.
+     *  maskExponent controls isolation sharpness: 1.0 = default, >1.0 = more
+     *  isolated (more artifacts), <1.0 = softer (more bleed, fewer artifacts). */
     SeparationResult separate(const juce::AudioBuffer<float>& input,
                               double sampleRate,
-                              std::atomic<float>* progress = nullptr) const;
+                              std::atomic<float>* progress = nullptr,
+                              float maskExponent = 1.0f) const;
 
 private:
     Utils utils_;

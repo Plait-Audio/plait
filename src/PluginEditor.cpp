@@ -78,7 +78,8 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
 
     if (threadShouldExit()) { p.separationRunning.store(false); return; }
 
-    auto result = p.getEngine().separate(inputCopy, sampleRate, &p.separationProgress);
+    const float exponent = p.maskExponent.load();
+    auto result = p.getEngine().separate(inputCopy, sampleRate, &p.separationProgress, exponent);
     inputCopy = juce::AudioBuffer<float>();
 
     if (threadShouldExit()) { p.separationRunning.store(false); return; }
@@ -140,10 +141,11 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     thumbCymbals_.addChangeListener(this);
 
     // ---- Load button (gold bg, black text, sentence-case) ----
-    loadButton_.setButtonText("Load");
+    loadButton_.setButtonText("Load Track");
     loadButton_.setColour(juce::TextButton::buttonColourId, kAccent);
     loadButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
     loadButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
+    loadButton_.setTooltip("Load a drum track (WAV, AIFF, FLAC, MP3)");
     loadButton_.onClick = [this]
     {
         juce::FileChooser chooser("Load audio file", {}, "*.wav;*.aiff;*.aif;*.flac;*.mp3");
@@ -154,13 +156,16 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
 
     // ---- Settings button (gear icon drawn in paint) ----
     settingsButton_.setButtonText("");
+    settingsButton_.setTooltip("Settings");
     settingsButton_.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
     settingsButton_.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
     settingsButton_.onClick = [this]
     {
         juce::PopupMenu m;
-        m.addItem(1, "Audio/MIDI Settings...");
+        m.addItem(1, "Audio Settings...");
         m.addItem(2, "License...");
+        m.addSeparator();
+        m.addItem(3, "Clear All", fileLoaded_);
         m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&settingsButton_),
             [this](int result)
             {
@@ -182,12 +187,17 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
                 {
                     showLicenseDialog();
                 }
+                else if (result == 3)
+                {
+                    clearAll();
+                }
             });
     };
     addAndMakeVisible(settingsButton_);
 
     // ---- Volume slider ----
     volumeSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
+    volumeSlider_.setTooltip("Master volume (Option+Click to reset to 0 dB)");
     volumeSlider_.setRange(-60.0, 6.0, 0.1);
     volumeSlider_.setValue(0.0);
     volumeSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 20);
@@ -207,6 +217,7 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     for (int i = 0; i < kNumRows; ++i)
     {
         soloButtons_[i].setButtonText("");
+        soloButtons_[i].setTooltip("Solo / play this stem (click again to pause)");
         soloButtons_[i].setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
         soloButtons_[i].setEnabled(false);
         const int idx = i;
@@ -224,6 +235,7 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     for (int i = 0; i < kNumRows; ++i)
     {
         saveButtons_[i].setButtonText("");
+        saveButtons_[i].setTooltip(i == 0 ? "Solo / play the input track" : "Export this stem (WAV or MIDI)");
         saveButtons_[i].setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
         saveButtons_[i].setEnabled(false);
         const int idx = i;
@@ -291,6 +303,7 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
 
     // ---- Toolbar ----
     separateButton_.setButtonText("Separate");
+    separateButton_.setTooltip("Run AI stem separation on the loaded track");
     separateButton_.setColour(juce::TextButton::buttonColourId, kAccent);
     separateButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
     separateButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
@@ -299,6 +312,7 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     addAndMakeVisible(separateButton_);
 
     exportWavsButton_.setButtonText("WAV");
+    exportWavsButton_.setTooltip("Export all separated stems as WAV files");
     exportWavsButton_.setColour(juce::TextButton::buttonColourId, kAccent);
     exportWavsButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
     exportWavsButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
@@ -307,6 +321,7 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     addAndMakeVisible(exportWavsButton_);
 
     exportMidiButton_.setButtonText("MIDI");
+    exportMidiButton_.setTooltip("Export drum hits as a MIDI file");
     exportMidiButton_.setColour(juce::TextButton::buttonColourId, kAccent);
     exportMidiButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
     exportMidiButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
@@ -315,8 +330,32 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     addAndMakeVisible(exportMidiButton_);
 
     progressBar_.setColour(juce::ProgressBar::foregroundColourId, kAccent);
+    progressBar_.setVisible(false);
     addAndMakeVisible(progressBar_);
 
+    isolationSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
+    isolationSlider_.setTooltip("Adjust isolation strength (higher = sharper separation, may add artifacts)");
+    isolationSlider_.setRange(0.5, 2.0, 0.05);
+    isolationSlider_.setValue(1.0);
+    isolationSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 36, 20);
+    isolationSlider_.setColour(juce::Slider::trackColourId, kBorder);
+    isolationSlider_.setColour(juce::Slider::thumbColourId, kAccent);
+    isolationSlider_.setColour(juce::Slider::textBoxTextColourId, kMuted);
+    isolationSlider_.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    isolationSlider_.onValueChange = [this]
+    {
+        audioProcessor_.maskExponent.store((float)isolationSlider_.getValue());
+    };
+    addAndMakeVisible(isolationSlider_);
+
+    isolationLabel_.setText("Isolation", juce::dontSendNotification);
+    isolationLabel_.setFont(ISOLookAndFeel::font(10.f));
+    isolationLabel_.setColour(juce::Label::textColourId, kMuted);
+    isolationLabel_.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(isolationLabel_);
+
+    setResizable(true, true);
+    setResizeLimits(720, 520, 1920, 1400);
     setSize(960, 700);
     startTimerHz(24);
 }
@@ -391,7 +430,7 @@ void ISODrumsAudioProcessorEditor::resized()
     // Settings zone + load button from the right
     constexpr int kSettingsZone = 48;
     header.removeFromRight(kSettingsZone);
-    constexpr int kLoadW = 90;
+    constexpr int kLoadW = 105;
     loadButton_.setBounds(header.removeFromRight(kLoadW).reduced(0, 2));
 
     // Settings button: centered between load right and ISO icon left
@@ -424,11 +463,21 @@ void ISODrumsAudioProcessorEditor::resized()
         tb.removeFromLeft(kBtnGap);
         exportMidiButton_.setBounds(tb.removeFromLeft(kBtnMinW));
 
-        // Progress: right-aligned with content edge (tracks / footer)
+        // Isolation slider (right side of toolbar)
+        const int isoLabelW = 52;
+        const int isoSliderW = juce::jmin(120, tb.getWidth() / 3);
+        auto isoArea = tb.removeFromRight(isoSliderW);
+        isoArea = isoArea.withSizeKeepingCentre(isoSliderW, 22);
+        isolationSlider_.setBounds(isoArea);
+        auto isoLabelArea = tb.removeFromRight(isoLabelW);
+        isoLabelArea = isoLabelArea.withSizeKeepingCentre(isoLabelW, 20);
+        isolationLabel_.setBounds(isoLabelArea);
+
+        // Progress bar: fills the middle
         auto progressArea = tb;
         progressArea.removeFromLeft(20);
         progressArea.removeFromLeft(36);
-        progressArea.removeFromRight(88);
+        progressArea.removeFromRight(8);
         progressBar_.setBounds(progressArea.reduced(0, 4));
     }
 
@@ -538,19 +587,25 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
                           svgW, svgH), 1.f);
     }
 
-    // ── Toolbar: progress indicators (always visible) ────────────────────────
+    // ── Toolbar: progress status (only visible during/after separation) ─────
     {
-        int pct = juce::roundToInt(progressValue_ * 100.0);
         auto pbarBounds = progressBar_.getBounds();
+        const bool separating = audioProcessor_.separationRunning.load();
 
-        g.setColour(ISOPalette::MutedLt);
-        g.setFont(ISOLookAndFeel::font(10.f));
-        g.drawText(juce::String(pct) + "%",
-                   pbarBounds.withX(pbarBounds.getX() - 36).withWidth(32),
-                   juce::Justification::centredRight);
-        g.drawText("Processing",
-                   pbarBounds.withX(pbarBounds.getRight() + 8).withWidth(80),
-                   juce::Justification::centredLeft);
+        if (stemsDone_)
+        {
+            g.setColour(juce::Colour(0xff44cc66));
+            g.setFont(ISOLookAndFeel::font(10.f));
+            g.drawText("Done", pbarBounds, juce::Justification::centred);
+        }
+        else if (separating || progressValue_ > 0.01)
+        {
+            int pct = juce::roundToInt(progressValue_ * 100.0);
+            g.setColour(ISOPalette::MutedLt);
+            g.setFont(ISOLookAndFeel::font(10.f));
+            g.drawText("Processing " + juce::String(pct) + "%",
+                       pbarBounds, juce::Justification::centred);
+        }
     }
 
     // ── Header ────────────────────────────────────────────────────────────────
@@ -688,8 +743,9 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
     {
         const bool active    = (soloStemIndex_ == i);
         const bool draggable = rowHasAudio(i);
+        const double ph = (soloStemIndex_ >= 0 && rowHasAudio(i)) ? playheadPos_ : -1.0;
         paintWaveformRow(g, rowBounds_[i], kRowLabels[i], *thumbs[i],
-                         kRowColours[i], active, draggable);
+                         kRowColours[i], active, draggable, ph);
     }
 
     // ── Solo/Save icons ───────────────────────────────────────────────────────
@@ -724,7 +780,8 @@ void ISODrumsAudioProcessorEditor::paintWaveformRow(juce::Graphics& g,
                                                      juce::AudioThumbnail& thumb,
                                                      juce::Colour waveColour,
                                                      bool active,
-                                                     bool /*draggable*/) const
+                                                     bool /*draggable*/,
+                                                     double playheadNorm) const
 {
     constexpr int kIconCol    = 28;
     constexpr int kColorStrip = 3;
@@ -793,6 +850,14 @@ void ISODrumsAudioProcessorEditor::paintWaveformRow(juce::Graphics& g,
         g.drawText(label, juce::Rectangle<float>(labelX, labelY, 80.f, 16.f),
                    juce::Justification::centredLeft);
     }
+
+    // Playhead
+    if (playheadNorm >= 0.0 && playheadNorm <= 1.0 && thumb.getTotalLength() > 0.0)
+    {
+        const float phX = (float)waveR.getX() + (float)waveR.getWidth() * (float)playheadNorm;
+        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        g.fillRect(phX, (float)waveR.getY(), 1.5f, (float)waveR.getHeight());
+    }
 }
 
 // ============================================================================
@@ -804,6 +869,40 @@ void ISODrumsAudioProcessorEditor::loadFile(const juce::File& file)
     auto* reader = formatManager_.createReaderFor(file);
     if (reader == nullptr) return;
 
+    // ── Stop any active playback ──────────────────────────────────────────────
+    if (auto* t = audioProcessor_.activeTransport.load())
+    {
+        t->stop();
+        t->setPosition(0.0);
+    }
+    audioProcessor_.activeTransport.store(nullptr);
+    soloStemIndex_ = -1;
+
+    // ── Clear previous stem thumbnails and sources ────────────────────────────
+    thumbKick_.clear();
+    thumbSnare_.clear();
+    thumbToms_.clear();
+    thumbHihat_.clear();
+    thumbCymbals_.clear();
+
+    audioProcessor_.transportKick.setSource(nullptr);
+    audioProcessor_.transportSnare.setSource(nullptr);
+    audioProcessor_.transportToms.setSource(nullptr);
+    audioProcessor_.transportHihat.setSource(nullptr);
+    audioProcessor_.transportCymbals.setSource(nullptr);
+    kickSource_.reset();
+    snareSource_.reset();
+    tomsSource_.reset();
+    hihatSource_.reset();
+    cymbalsSource_.reset();
+
+    {
+        juce::ScopedLock sl(audioProcessor_.resultLock);
+        audioProcessor_.separationResult = SeparationResult();
+        audioProcessor_.allHits.clear();
+    }
+
+    // ── Load the new file ─────────────────────────────────────────────────────
     currentFile_    = file;
     inputFileName_  = file.getFileNameWithoutExtension();
 
@@ -817,7 +916,6 @@ void ISODrumsAudioProcessorEditor::loadFile(const juce::File& file)
         audioProcessor_.inputSampleRate = reader->sampleRate;
     }
 
-    audioProcessor_.activeTransport.store(nullptr);
     audioProcessor_.transportInput.setSource(nullptr);
     inputSource_.reset();
 
@@ -830,10 +928,79 @@ void ISODrumsAudioProcessorEditor::loadFile(const juce::File& file)
 
     fileLoaded_ = true;
     stemsDone_  = false;
-    soloStemIndex_ = -1;
+    progressValue_ = 0.0;
+    audioProcessor_.separationProgress.store(0.0f);
 
     separateButton_.setEnabled(audioProcessor_.getEngine().isReady());
     soloButtons_[0].setEnabled(true);
+    for (int i = 1; i < kNumRows; ++i)
+    {
+        soloButtons_[i].setEnabled(false);
+        saveButtons_[i].setEnabled(false);
+    }
+
+    repaint();
+}
+
+// ============================================================================
+// Clear All
+// ============================================================================
+
+void ISODrumsAudioProcessorEditor::clearAll()
+{
+    if (audioProcessor_.separationRunning.load()) return;
+
+    if (auto* t = audioProcessor_.activeTransport.load())
+    {
+        t->stop();
+        t->setPosition(0.0);
+    }
+    audioProcessor_.activeTransport.store(nullptr);
+    soloStemIndex_ = -1;
+    playheadPos_ = 0.0;
+
+    thumbInput_.clear();
+    thumbKick_.clear();
+    thumbSnare_.clear();
+    thumbToms_.clear();
+    thumbHihat_.clear();
+    thumbCymbals_.clear();
+
+    audioProcessor_.transportInput.setSource(nullptr);
+    audioProcessor_.transportKick.setSource(nullptr);
+    audioProcessor_.transportSnare.setSource(nullptr);
+    audioProcessor_.transportToms.setSource(nullptr);
+    audioProcessor_.transportHihat.setSource(nullptr);
+    audioProcessor_.transportCymbals.setSource(nullptr);
+    inputSource_.reset();
+    kickSource_.reset();
+    snareSource_.reset();
+    tomsSource_.reset();
+    hihatSource_.reset();
+    cymbalsSource_.reset();
+
+    {
+        juce::ScopedLock sl(audioProcessor_.resultLock);
+        audioProcessor_.separationResult = SeparationResult();
+        audioProcessor_.allHits.clear();
+        audioProcessor_.inputBuffer = juce::AudioBuffer<float>();
+    }
+
+    currentFile_ = juce::File();
+    inputFileName_ = juce::String();
+    fileLoaded_ = false;
+    stemsDone_ = false;
+    progressValue_ = 0.0;
+    audioProcessor_.separationProgress.store(0.0f);
+
+    separateButton_.setEnabled(false);
+    exportWavsButton_.setEnabled(false);
+    exportMidiButton_.setEnabled(false);
+    for (int i = 0; i < kNumRows; ++i)
+    {
+        soloButtons_[i].setEnabled(false);
+        saveButtons_[i].setEnabled(false);
+    }
 
     repaint();
 }
@@ -932,21 +1099,6 @@ void ISODrumsAudioProcessorEditor::attachStemSources()
 
 void ISODrumsAudioProcessorEditor::setSolo(int stemIndex)
 {
-    if (auto* t = audioProcessor_.activeTransport.load())
-    {
-        t->stop();
-        t->setPosition(0.0);
-    }
-    audioProcessor_.activeTransport.store(nullptr);
-
-    soloStemIndex_ = stemIndex;
-
-    if (stemIndex < 0)
-    {
-        repaint();
-        return;
-    }
-
     juce::AudioTransportSource* targets[kNumRows] = {
         &audioProcessor_.transportInput,
         &audioProcessor_.transportKick,
@@ -955,6 +1107,37 @@ void ISODrumsAudioProcessorEditor::setSolo(int stemIndex)
         &audioProcessor_.transportHihat,
         &audioProcessor_.transportCymbals,
     };
+
+    auto* current = audioProcessor_.activeTransport.load();
+
+    // Re-clicking the active stem toggles play/pause
+    if (stemIndex == soloStemIndex_ && current != nullptr)
+    {
+        if (current->isPlaying())
+        {
+            current->stop();
+        }
+        else
+        {
+            current->start();
+        }
+        repaint();
+        return;
+    }
+
+    // Switching to a different stem or deselecting
+    if (current != nullptr)
+        current->stop();
+    audioProcessor_.activeTransport.store(nullptr);
+
+    soloStemIndex_ = stemIndex;
+    playheadPos_ = 0.0;
+
+    if (stemIndex < 0)
+    {
+        repaint();
+        return;
+    }
 
     auto* chosen = targets[stemIndex];
     chosen->setPosition(0.0);
@@ -1102,10 +1285,27 @@ void ISODrumsAudioProcessorEditor::exportMidi(const MidiExportSettings& settings
 
 void ISODrumsAudioProcessorEditor::timerCallback()
 {
-    // Always sync progress — gating on separationRunning caused a race where
-    // the thread set progress=1.0 then running=false before the next tick,
-    // so 100% was never rendered.
     progressValue_ = static_cast<double>(audioProcessor_.separationProgress.load());
+
+    bool showProgress = audioProcessor_.separationRunning.load() || (progressValue_ > 0.01 && !stemsDone_);
+    progressBar_.setVisible(showProgress);
+
+    if (auto* t = audioProcessor_.activeTransport.load())
+    {
+        double len = t->getLengthInSeconds();
+        if (len > 0.0)
+            playheadPos_ = t->getCurrentPosition() / len;
+
+        if (t->hasStreamFinished())
+        {
+            t->stop();
+            t->setPosition(0.0);
+            audioProcessor_.activeTransport.store(nullptr);
+            soloStemIndex_ = -1;
+            playheadPos_ = 0.0;
+        }
+    }
+
     repaint();
 }
 
@@ -1171,6 +1371,33 @@ void ISODrumsAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
 {
     dragSourceRow_ = -1;
     int row = hitTestWaveformRow(e.getPosition());
+
+    // Click-to-seek: if an active transport is playing and the click is on a
+    // waveform row that has audio, compute the normalized position and seek.
+    if (row >= 0 && rowHasAudio(row) && soloStemIndex_ >= 0)
+    {
+        constexpr int kIconCol    = 28;
+        constexpr int kColorStrip = 3;
+
+        auto waveArea = waveformBounds_[row];
+        waveArea.removeFromLeft(kIconCol + kColorStrip + 4);
+        auto waveR = waveArea.reduced(10, 6);
+
+        if (waveR.contains(e.getPosition()))
+        {
+            double norm = (double)(e.getPosition().x - waveR.getX()) / (double)waveR.getWidth();
+            norm = juce::jlimit(0.0, 1.0, norm);
+
+            if (auto* t = audioProcessor_.activeTransport.load())
+            {
+                t->setPosition(norm * t->getLengthInSeconds());
+                playheadPos_ = norm;
+                repaint();
+                return;
+            }
+        }
+    }
+
     if (row >= 0 && rowHasAudio(row))
         dragSourceRow_ = row;
 }

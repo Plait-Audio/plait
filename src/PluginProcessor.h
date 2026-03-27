@@ -75,6 +75,9 @@ public:
     // Output gain controlled by the volume slider (linear, default 1.0)
     std::atomic<float> outputGain { 1.0f };
 
+    // Isolation mask exponent: 1.0 = default, >1.0 = more isolation, <1.0 = softer
+    std::atomic<float> maskExponent { 1.0f };
+
 private:
     SeparationEngine engine_;
     LicenseManager   licenseManager_;
