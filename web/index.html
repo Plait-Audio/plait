@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ISO Drums — Drum stem separation for macOS</title>
-<meta name="description" content="ISO Drums separates any drum recording into five clean stems and exports a MIDI file. Runs fully local on Apple Silicon. No cloud, no subscription.">
+<meta name="description" content="ISO Drums separates any drum recording into five drum stems and a velocity-aware MIDI groove. Runs fully local on Apple Silicon (macOS 11+). No cloud, no subscription.">
 
 <!-- OpenGraph -->
 <meta property="og:title" content="ISO Drums — Drum stem separation for macOS">
-<meta property="og:description" content="Drop in a drum recording. Walk away with five clean stems and a MIDI file. Fully offline, Apple Silicon native.">
+<meta property="og:description" content="Drop in a drum recording. Get five drum stems and a velocity-aware MIDI groove — fully offline, Apple Silicon native. macOS 11+.">
 <meta property="og:image" content="https://plaitaudio.com/Plait-opengraph.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -16,6 +16,15 @@
 <meta property="og:url" content="https://plaitaudio.com/iso-drums">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://plaitaudio.com/Plait-opengraph.png">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-5KDEP34PFL"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-5KDEP34PFL');
+</script>
 
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -341,7 +350,7 @@
     min-width: 0;
     overflow: hidden;
   }
-  .track-bar { width: 2px; border-radius: 1px; transition: height 0.4s ease; }
+  .track-bar { flex: 1 1 0; min-width: 0; border-radius: 1px; transition: height 0.4s ease; }
   .track-controls { display: flex; gap: 5px; flex-shrink: 0; }
   .track-btn {
     width: 24px; height: 24px;
@@ -947,20 +956,20 @@
     <h1>ISO Drums</h1>
 
     <p class="hero-sub">
-      Drop in a drum recording. Walk away with five
-      clean stems and a MIDI file — no cloud,
+      Drop in a drum recording. Walk away with five drum
+      stems and a velocity-aware MIDI groove — no cloud,
       no account, no&nbsp;waiting.
     </p>
 
     <div class="hero-actions">
-      <a href="https://github.com/Plait-Audio/plait/releases/download/v0.3.0/ISO-Drums-macOS-arm64-0.3.0.dmg" class="btn-primary">
+      <a href="https://github.com/Plait-Audio/plait/releases/download/v0.3.0/ISO-Drums-macOS-arm64-0.3.0.dmg" class="btn-primary" data-download>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Download Free Beta
       </a>
       <a href="#how" class="btn-ghost">See How It Works</a>
     </div>
 
-    <p class="hero-note">Free during open beta &nbsp;·&nbsp; No account required &nbsp;·&nbsp; macOS Apple Silicon</p>
+    <p class="hero-note">Free during open beta &nbsp;·&nbsp; No account required &nbsp;·&nbsp; <span data-sysreq>macOS 11+ · Apple Silicon (M1 or later)</span></p>
 
     <div class="waveform-hero">
       <div class="waveform-hero-container">
@@ -1163,13 +1172,27 @@
       <li>Auto BPM detection</li>
       <li>Drag-to-DAW for all stems</li>
       <li>Standalone + AU + VST3</li>
-      <li>Fully offline — runs on your machine</li>
+      <li>Your audio never leaves your machine</li>
+      <li>Anonymous usage stats are optional — off by default</li>
     </ul>
 
-    <a href="https://github.com/Plait-Audio/plait/releases/download/v0.3.0/ISO-Drums-macOS-arm64-0.3.0.dmg" class="pricing-btn">
+    <div data-oswarn style="display:none; margin-bottom:14px; padding:12px 14px; border-radius:10px; background:rgba(201,110,110,0.10); border:1px solid rgba(201,110,110,0.35); color:var(--text-secondary); font-size:13px; line-height:1.5;"></div>
+
+    <a href="https://github.com/Plait-Audio/plait/releases/download/v0.3.0/ISO-Drums-macOS-arm64-0.3.0.dmg" class="pricing-btn" data-download>
       Download ISO Drums Beta
     </a>
-    <span class="pricing-trial">macOS · Apple Silicon M1+ · v0.3.0</span>
+    <span class="pricing-trial"><span data-sysreq>macOS 11+ · Apple Silicon (M1 or later)</span> · v0.3.0</span>
+
+    <form data-subscribe style="margin-top:22px; text-align:left;">
+      <label style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:8px;">Get notified about updates &amp; launch pricing — optional, no spam.</label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input data-email type="email" required placeholder="you@example.com" autocomplete="email"
+          style="flex:1; min-width:180px; padding:11px 13px; border-radius:9px; border:1px solid var(--border); background:var(--bg-elevated); color:var(--text-primary); font-size:14px;">
+        <button type="submit"
+          style="padding:11px 18px; border-radius:9px; border:none; background:var(--accent, #C9A96E); color:#000; font-weight:600; font-size:14px; cursor:pointer;">Notify me</button>
+      </div>
+      <div data-submsg style="font-size:12px; color:var(--text-muted); margin-top:8px; min-height:16px;"></div>
+    </form>
 
     <div style="margin-top: 20px; padding: 18px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; text-align: left;">
       <div style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;">Installation</div>
@@ -1230,8 +1253,9 @@
   </a>
   <div class="footer-links">
     <a href="#download">Download</a>
+    <a href="/privacy.html">Privacy</a>
+    <a href="/terms.html">Terms</a>
     <a href="mailto:zach@allmannerofus.com">Support</a>
-    <a href="mailto:zach@allmannerofus.com">Contact</a>
   </div>
   <div class="footer-copy">&copy; 2026 Plait</div>
 </footer>
@@ -1306,7 +1330,8 @@
   function generateHeroWaveform() {
     const container = document.getElementById('hero-waveform');
     const isMobile = window.innerWidth < 768;
-    const barCount = isMobile ? 58 : 120;
+    // Bars flex to fill the track width; enough of them to stay visually thin.
+    const barCount = isMobile ? 80 : 170;
     const stems = [
       { label: 'Kick',   color: '#C45C5C', pattern: 'kick',   seed: 42 },
       { label: 'Snare',  color: '#C98A4A', pattern: 'snare',  seed: 49 },
@@ -1367,6 +1392,48 @@
   generateMiniWave('wave-toms',   '#6B9E6B', 'toms',   23);
   generateMiniWave('wave-hihat',  '#5C8EC4', 'hihat',  31);
   generateMiniWave('wave-cymbal', '#8A6EC9', 'cymbal', 37);
+
+  // ── Platform check: this is a macOS Apple-Silicon build only ───────
+  (function(){
+    const ua = navigator.userAgent || '';
+    const isMac = /Mac/i.test(ua) || (navigator.platform || '').startsWith('Mac');
+    const isWindows = /Windows/i.test(ua);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
+    if (isMac && !isMobile) return;  // supported (Apple-Silicon check isn't reliable in-browser; requirement text covers it)
+
+    const msg = isWindows ? 'ISO Drums is macOS-only right now — a Windows build isn’t available yet.'
+              : isMobile  ? 'ISO Drums is a desktop app for macOS (Apple Silicon). Open this page on your Mac to download.'
+              :             'ISO Drums requires macOS 11+ on Apple Silicon. This device doesn’t look supported.';
+    const warn = document.querySelector('[data-oswarn]');
+    if (warn){ warn.textContent = msg + ' Leave your email below and we’ll tell you when that changes.'; warn.style.display = 'block'; }
+    document.querySelectorAll('[data-download]').forEach(b => {
+      b.style.opacity = '0.5';
+      b.addEventListener('click', e => {
+        if (!confirm(msg + '\n\nDownload the macOS build anyway?')) e.preventDefault();
+      });
+    });
+  })();
+
+  // ── Optional email capture ─────────────────────────────────────────
+  document.querySelectorAll('[data-subscribe]').forEach(form => {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const input = form.querySelector('[data-email]');
+      const out = form.querySelector('[data-submsg]');
+      const email = (input.value || '').trim();
+      out.style.color = 'var(--text-muted)';
+      out.textContent = 'Signing you up…';
+      try {
+        const r = await fetch('/api/subscribe', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ email })
+        });
+        const data = await r.json().catch(() => ({ ok: r.ok }));
+        if (r.ok && data.ok){ out.style.color = 'var(--accent, #C9A96E)'; out.textContent = 'You’re on the list. Thanks!'; form.reset(); }
+        else { out.style.color = '#C96E6E'; out.textContent = data.message || 'Something went wrong. Try again.'; }
+      } catch { out.style.color = '#C96E6E'; out.textContent = 'Network error. Try again later.'; }
+    });
+  });
 </script>
 
 </body>

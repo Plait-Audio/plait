@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>500 · ISO Drums</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#09090B; --text-primary:#E8E4DF; --text-secondary:#8A8A8E;
+    --text-muted:#5A5A5E; --accent:#C9A96E; --border:#2A2A2F;
+    --font-display:'Syne',sans-serif; --font-body:'DM Sans',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;
+    padding:40px 24px;position:relative;overflow:hidden;-webkit-font-smoothing:antialiased}
+  .bg{position:absolute;inset:0;z-index:0}
+  .bg img{width:100%;height:100%;object-fit:cover;object-position:center}
+  .bg::after{content:'';position:absolute;inset:0;
+    background:
+      radial-gradient(ellipse at 50% 45%, rgba(9,9,11,0.35) 25%, rgba(9,9,11,0.82) 100%),
+      linear-gradient(to bottom, rgba(9,9,11,0.72) 0%, rgba(9,9,11,0.4) 40%, rgba(9,9,11,0.9) 100%);}
+  .content{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;max-width:520px}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;background:rgba(19,19,22,0.6);
+    border:1px solid var(--border);border-radius:24px;font-family:var(--font-mono);font-size:11px;
+    color:var(--text-secondary);letter-spacing:.5px;margin-bottom:30px;backdrop-filter:blur(8px)}
+  .badge .dot{width:6px;height:6px;background:#C96E6E;border-radius:50%}
+  .code{font-family:var(--font-display);font-weight:800;font-size:clamp(88px,18vw,168px);
+    line-height:.9;letter-spacing:-4px;margin-bottom:20px;text-shadow:0 2px 40px rgba(9,9,11,.6)}
+  .flatline{display:flex;align-items:flex-end;gap:3px;height:16px;margin:0 0 28px;opacity:.5}
+  .flatline i{width:3px;background:var(--text-muted);border-radius:1px}
+  .headline{font-family:var(--font-display);font-weight:600;font-size:clamp(22px,4vw,30px);margin-bottom:14px}
+  .sub{font-size:16px;color:rgba(232,228,223,.72);line-height:1.7;max-width:400px;margin-bottom:36px}
+  .actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 30px;border-radius:10px;
+    font-weight:600;font-size:15px;text-decoration:none;cursor:pointer;border:none;
+    transition:opacity .2s,transform .15s;font-family:var(--font-body)}
+  .btn-primary{background:var(--text-primary);color:var(--bg-deep)}
+  .btn-ghost{background:rgba(19,19,22,0.5);color:var(--text-primary);border:1px solid rgba(42,42,47,0.8)}
+  .btn:hover{opacity:.88;transform:translateY(-1px)}
+</style>
+</head>
+<body>
+  <div class="bg"><img src="/hero-photo.png" alt=""></div>
+  <div class="content">
+    <div class="badge"><span class="dot"></span>ISO DRUMS · ERROR 500</div>
+    <div class="code">500</div>
+    <div class="flatline">
+      <i style="height:4px"></i><i style="height:9px"></i><i style="height:3px"></i><i style="height:13px"></i><i style="height:5px"></i><i style="height:2px"></i><i style="height:10px"></i><i style="height:6px"></i><i style="height:14px"></i><i style="height:3px"></i><i style="height:8px"></i><i style="height:2px"></i><i style="height:11px"></i><i style="height:5px"></i><i style="height:7px"></i><i style="height:3px"></i><i style="height:12px"></i><i style="height:4px"></i><i style="height:9px"></i><i style="height:2px"></i>
+    </div>
+    <div class="headline">We dropped a beat.</div>
+    <div class="sub">Something glitched on our end — not your take. Give it a second and try again.</div>
+    <div class="actions">
+      <a class="btn btn-primary" href="javascript:location.reload()">↻ Try again</a>
+      <a class="btn btn-ghost" href="/">Back to ISO Drums</a>
+    </div>
+  </div>
+</body>
+</html>

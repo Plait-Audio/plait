@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · ISO Drums</title>
+<style>
+  :root{--bg:#0d0d0e;--panel:#151517;--border:#2a2a2e;--text:#ececee;--muted:#9a9aa0;--accent:#C9A96E}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:56px 24px 80px}
+  a{color:var(--accent)}
+  h1{font-size:28px;margin:0 0 6px}
+  h2{font-size:18px;margin:34px 0 10px}
+  .meta{color:var(--muted);font-size:14px;margin-bottom:8px}
+  p,li{color:#d5d5d8}
+  .muted{color:var(--muted)}
+  ul{padding-left:22px}
+  .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin:18px 0}
+  .back{display:inline-block;margin-bottom:26px;color:var(--muted);text-decoration:none;font-size:14px}
+  footer{margin-top:48px;color:var(--muted);font-size:13px;border-top:1px solid var(--border);padding-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">← ISO Drums</a>
+  <h1>Privacy Policy</h1>
+  <div class="meta">ISO Drums, by Plait Audio · Last updated: August 2026</div>
+
+  <p>This policy explains what data ISO Drums and this website collect, and what we do with it. The short version: <strong>your audio never leaves your machine</strong>, product analytics are <strong>off by default</strong>, and we don’t sell your data.</p>
+
+  <h2>Your audio</h2>
+  <p>ISO Drums processes audio entirely on your computer. Your recordings, the separated stems, and any exported files are never uploaded to us or to any third party. There is no cloud processing.</p>
+
+  <h2>Product analytics (opt-in, off by default)</h2>
+  <p>The app collects <strong>no usage data unless you turn it on</strong> (a one-time prompt on first launch, and a toggle in Settings). If you opt in, the app sends occasional anonymous events so we can see how ISO Drums is used and where it breaks:</p>
+  <ul>
+    <li>A random install identifier (a UUID generated on your machine, <em>not</em> derived from your hardware, license, email, or network address);</li>
+    <li>The app version, your operating system name, and CPU architecture;</li>
+    <li>Coarse event counts: app launches, separations (with a rough input-length bucket and success/failure), and stem/MIDI exports.</li>
+  </ul>
+  <div class="box">We never send your audio, filenames, file paths, license key, or any file contents. Analytics are stored only as aggregate daily counters and expire automatically after about 13 months. You can turn analytics off at any time in Settings.</div>
+
+  <h2>Licensing</h2>
+  <p>ISO Drums is free during its open beta. If you buy a license in the future and activate it, the app sends your license key and a machine identifier (derived from your computer’s network hardware) to our server so we can validate the license and enforce the per-license machine limit. We store the license key, the email address associated with the purchase, and the identifiers of activated machines.</p>
+
+  <h2>This website</h2>
+  <ul>
+    <li><strong>Analytics:</strong> we use Google Analytics 4, which sets cookies and collects aggregate, standard web-traffic data (pages, referrers, approximate region). It is not linked to the app’s install identifier.</li>
+    <li><strong>Email signup:</strong> if you enter your email to be notified about updates, we store it to send you product news. It’s optional, we don’t require it to download, and you can unsubscribe or request deletion any time by emailing us.</li>
+    <li><strong>Payments:</strong> purchases (when available) are handled by LemonSqueezy, our merchant of record. They collect and process your payment and billing details under their own privacy policy; we receive the order confirmation and the email needed to issue your license.</li>
+    <li><strong>License email:</strong> license keys are delivered via Resend, our transactional email provider.</li>
+  </ul>
+
+  <h2>Where data is stored</h2>
+  <p>The website and its APIs run on Vercel, and the small amount of data described above (aggregate analytics counters, license records, subscriber emails) is stored in Vercel KV (Upstash Redis).</p>
+
+  <h2>What we don’t do</h2>
+  <ul>
+    <li>We don’t sell, rent, or share your personal data.</li>
+    <li>We don’t use your audio for anything, including training.</li>
+    <li>We don’t track you across other websites beyond standard Google Analytics on this site.</li>
+  </ul>
+
+  <h2>Your choices</h2>
+  <ul>
+    <li>Leave app analytics off (the default), or turn them off later in Settings.</li>
+    <li>Unsubscribe from update emails, or ask us to delete your email or license data, by emailing <a href="mailto:zach@allmannerofus.com">zach@allmannerofus.com</a>.</li>
+  </ul>
+
+  <h2>Changes</h2>
+  <p>We’ll update this page if our practices change, and revise the “last updated” date above.</p>
+
+  <footer>
+    Questions? <a href="mailto:zach@allmannerofus.com">zach@allmannerofus.com</a><br>
+    ISO Drums uses neural separation models based on LarsNet, trained on the StemGMD dataset (CC BY 4.0).
+  </footer>
+</div>
+</body>
+</html>
