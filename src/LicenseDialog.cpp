@@ -6,7 +6,11 @@ static juce::Colour stateAccentColour(LicenseState s)
 {
     switch (s)
     {
+      #if ISO_FREE_BETA
+        case LicenseState::Trial:              return juce::Colour(0xffC9A96E); // brand gold, neutral
+      #else
         case LicenseState::Trial:              return juce::Colour(0xffffaa33);
+      #endif
         case LicenseState::TrialExpired:       return juce::Colour(0xffff4444);
         case LicenseState::Licensed:           return juce::Colour(0xff44cc66);
         case LicenseState::LicenseCheckNeeded: return juce::Colour(0xffffaa33);
@@ -20,7 +24,11 @@ juce::String LicenseDialog::stateText(LicenseState s)
 {
     switch (s)
     {
+      #if ISO_FREE_BETA
+        case LicenseState::Trial:              return "BETA";
+      #else
         case LicenseState::Trial:              return "TRIAL";
+      #endif
         case LicenseState::TrialExpired:       return "TRIAL EXPIRED";
         case LicenseState::Licensed:           return "LICENSED";
         case LicenseState::LicenseCheckNeeded: return "CHECK NEEDED";
@@ -167,9 +175,13 @@ void LicenseDialog::updateStateDisplay()
     switch (state)
     {
         case LicenseState::Trial:
+          #if ISO_FREE_BETA
+            info = "Free public beta \xe2\x80\x94 unlimited WAV and MIDI exports.";
+          #else
             info = juce::String(lm_.trialDaysRemaining()) + " days remaining  |  "
                  + juce::String(lm_.wavExportsRemaining()) + " WAV / "
                  + juce::String(lm_.midiExportsRemaining()) + " MIDI exports left";
+          #endif
             break;
         case LicenseState::TrialExpired:
             info = "Trial expired. Enter a key to unlock unlimited exports.";

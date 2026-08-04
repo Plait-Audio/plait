@@ -77,7 +77,10 @@ target_compile_definitions(ISODrums
         JUCE_MODAL_LOOPS_PERMITTED=1
         JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
     PRIVATE
-        ISO_VERSION_STRING="${PROJECT_VERSION}")
+        ISO_VERSION_STRING="${PROJECT_VERSION}"
+        # Free public beta: no trial expiry, no export caps, neutral "Beta"
+        # labelling. Flip to 0 in phase two when paid licensing goes live.
+        ISO_FREE_BETA=1)
 
 file(GLOB ISO_MODEL_FILES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     "Resources/onnx/*.onnx")

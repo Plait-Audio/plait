@@ -186,6 +186,11 @@ LicenseState LicenseManager::getState() const
         return LicenseState::Licensed;
     }
 
+#if ISO_FREE_BETA
+    // Free public beta: unlicensed users never expire and are never export-
+    // capped. The Trial state presents neutrally as "Beta" in the UI.
+    return LicenseState::Trial;
+#else
     const auto now     = juce::Time::currentTimeMillis();
     const juce::int64 trialMs  = static_cast<juce::int64>(kTrialDays) * 86400LL * 1000LL;
     const juce::int64 elapsed  = now - firstLaunchMs_;
@@ -198,6 +203,7 @@ LicenseState LicenseManager::getState() const
         return LicenseState::TrialExpired;
 
     return LicenseState::Trial;
+#endif
 }
 
 int LicenseManager::trialDaysRemaining() const

@@ -977,6 +977,15 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
         {
             case LicenseState::Trial:
             {
+              #if ISO_FREE_BETA
+                // Free public beta: a single neutral "Beta" chip, no countdown.
+                g.setColour(kAccent);
+                g.setFont(ISOLookAndFeel::font(11.f, true));
+                g.drawText("Beta",
+                           juce::Rectangle<float>(textRight - 60.f, textY, 60.f, textH),
+                           juce::Justification::centredRight);
+                break;
+              #else
                 int daysLeft = lm.trialDaysRemaining();
                 juce::String days = juce::String(daysLeft) + (daysLeft == 1 ? " Day" : " Days");
 
@@ -1006,6 +1015,7 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
                 g.drawText(days, juce::Rectangle<float>(tx, textY, daysW, textH),
                            juce::Justification::centredLeft);
                 break;
+              #endif
             }
             case LicenseState::TrialExpired:
                 g.setColour(juce::Colour(0xffff4444));
