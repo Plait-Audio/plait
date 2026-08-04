@@ -117,13 +117,24 @@ if gh release view "${TAG}" >/dev/null 2>&1; then
 fi
 
 NOTES_FILE=$(mktemp)
+# Pull the "## v<version>" section out of CHANGELOG.md if present.
+CHANGELOG="${ROOT_DIR}/CHANGELOG.md"
+WHATS_NEW=""
+if [[ -f "${CHANGELOG}" ]]; then
+  WHATS_NEW=$(awk -v v="## v${VERSION}" '
+    $0==v {grab=1; next}
+    /^## v/ && grab {exit}
+    grab {print}
+  ' "${CHANGELOG}")
+fi
+[[ -z "${WHATS_NEW// }" ]] && WHATS_NEW="- See CHANGELOG.md for details."
+
 cat > "${NOTES_FILE}" << NOTES
 ## ISO Drums ${TAG}
 
-macOS Apple Silicon (M1+) — Standalone App, AU & VST3
+macOS 11+ · Apple Silicon (M1–M4) — Standalone App, AU & VST3
 
-### What's new
-- See commit history for full details.
+${WHATS_NEW}
 
 ### Installation
 1. Download the DMG below
