@@ -50,6 +50,7 @@ public:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseMove(const juce::MouseEvent&) override;
+    bool keyPressed(const juce::KeyPress& key) override;   // space = play/pause, ←/→ = skip 10s
 
 private:
     // ---- Worker thread ----
@@ -71,6 +72,11 @@ private:
     juce::TooltipWindow     tooltipWindow_ { this, 500 };
     ISODrumsAudioProcessor& audioProcessor_;
     SeparationThread        separationThread_;
+
+    // In-app overlays (analytics consent, keyboard-shortcuts reference).
+    std::unique_ptr<juce::Component> consentOverlay_;
+    std::unique_ptr<juce::Component> shortcutsOverlay_;
+    void showShortcutsOverlay();
 
     // ---- Audio I/O helpers ----
     juce::AudioFormatManager formatManager_;
@@ -111,6 +117,15 @@ private:
     juce::TextButton separateButton_  { "Separate" };
     juce::TextButton exportWavsButton_{ "WAV" };
     juce::TextButton exportMidiButton_{ "MIDI" };
+
+    // Global transport (skip -10s / play-pause / skip +10s)
+    juce::TextButton prevBtn_, playBtn_, nextBtn_;
+    void globalPlayPause();
+    void skipSeconds(double delta);
+    juce::AudioTransportSource* rowTransport(int row);
+
+    // Separate button doubles as the completion indicator ("Done").
+    void setSeparateButtonDone(bool done);
 
     // Isolation amount (mask exponent): 1.0 = default
     juce::Slider isolationSlider_;

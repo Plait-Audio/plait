@@ -25,6 +25,213 @@ static const juce::Colour kAccent  { ISOPalette::Accent  };
 static const juce::Colour kMuted   { ISOPalette::Muted   };
 static const juce::Colour kText    { ISOPalette::Text    };
 
+// ---- In-app analytics consent overlay (dim scrim + centered card) ----
+namespace {
+class ConsentOverlay : public juce::Component
+{
+public:
+    explicit ConsentOverlay(std::function<void(bool)> onChoice)
+        : onChoice_(std::move(onChoice))
+    {
+        setAlwaysOnTop(true);
+        auto initBtn = [this](juce::TextButton& b, juce::Colour bg, juce::Colour fg)
+        {
+            b.setColour(juce::TextButton::buttonColourId, bg);
+            b.setColour(juce::TextButton::textColourOnId,  fg);
+            b.setColour(juce::TextButton::textColourOffId, fg);
+            addAndMakeVisible(b);
+        };
+        noBtn_.setButtonText("Not now");
+        yesBtn_.setButtonText("Sure");
+        initBtn(noBtn_,  ISOPalette::RowBg,  ISOPalette::Text);
+        initBtn(yesBtn_, ISOPalette::Accent, juce::Colours::black);
+        noBtn_.onClick  = [this] { if (onChoice_) onChoice_(false); };
+        yesBtn_.onClick = [this] { if (onChoice_) onChoice_(true);  };
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        g.fillAll(juce::Colour(0xcc09090b));                    // dim to focus
+
+        auto card = cardBounds();
+        juce::DropShadow(juce::Colours::black.withAlpha(0.55f), 34, { 0, 12 })
+            .drawForRectangle(g, card.toNearestInt());
+        g.setColour(ISOPalette::Surface);
+        g.fillRoundedRectangle(card, 14.0f);
+        g.setColour(ISOPalette::Border);
+        g.drawRoundedRectangle(card, 14.0f, 1.0f);
+
+        auto inner = card.reduced(30.0f, 26.0f);
+        g.setColour(ISOPalette::Text);
+        g.setFont(ISOLookAndFeel::font(18.0f, true));
+        g.drawText("Help improve ISO Drums?",
+                   inner.removeFromTop(26.0f).toNearestInt(), juce::Justification::topLeft);
+
+        inner.removeFromTop(12.0f);
+        g.setColour(ISOPalette::TextDim);
+        g.setFont(ISOLookAndFeel::font(13.5f));
+        g.drawFittedText("Send anonymous usage stats to help shape ISO Drums? "
+                         "No audio, filenames, or personal data, ever. "
+                         "You can change this any time in Settings.",
+                         inner.removeFromTop(74.0f).toNearestInt(),
+                         juce::Justification::topLeft, 4);
+    }
+
+    void resized() override
+    {
+        auto card = cardBounds().reduced(30.0f, 26.0f).toNearestInt();
+        auto row  = card.removeFromBottom(36);
+        yesBtn_.setBounds(row.removeFromRight(104));
+        row.removeFromRight(10);
+        noBtn_.setBounds(row.removeFromRight(104));
+    }
+
+    // Swallow clicks on the scrim so the app behind stays inert (modal feel).
+    void mouseDown(const juce::MouseEvent&) override {}
+
+private:
+    juce::Rectangle<float> cardBounds() const
+    {
+        const float w = 400.0f, h = 224.0f;
+        return { (getWidth() - w) * 0.5f, (getHeight() - h) * 0.5f, w, h };
+    }
+    std::function<void(bool)> onChoice_;
+    juce::TextButton noBtn_, yesBtn_;
+};
+
+// A centred square inside a (possibly non-square) rect — keeps glyphs undistorted.
+static juce::Rectangle<float> centredSquare(juce::Rectangle<float> r, float inset)
+{
+    const float s = juce::jmin(r.getWidth(), r.getHeight()) - inset * 2.0f;
+    return juce::Rectangle<float>(0.0f, 0.0f, s, s).withCentre(r.getCentre());
+}
+
+// Clear play / pause transport glyph (replaces the ambiguous solo icon).
+static void drawPlayPause(juce::Graphics& g, juce::Rectangle<float> box, bool playing, juce::Colour c)
+{
+    auto b = centredSquare(box, 0.0f);
+    g.setColour(c);
+    if (playing)
+    {
+        const float bw  = b.getWidth() * 0.20f;
+        const float gap = b.getWidth() * 0.20f;
+        auto h = b.reduced(0.0f, b.getHeight() * 0.14f);
+        g.fillRoundedRectangle(h.getCentreX() - gap * 0.5f - bw, h.getY(), bw, h.getHeight(), 1.2f);
+        g.fillRoundedRectangle(h.getCentreX() + gap * 0.5f,      h.getY(), bw, h.getHeight(), 1.2f);
+    }
+    else
+    {
+        auto t = b.reduced(b.getWidth() * 0.26f, b.getHeight() * 0.16f);
+        juce::Path tri;
+        tri.addTriangle(t.getX(), t.getY(), t.getX(), t.getBottom(), t.getRight(), t.getCentreY());
+        g.fillPath(tri);
+    }
+}
+
+// Double-triangle skip (back / forward 10s) — two evenly spaced chevrons.
+static void drawSkip(juce::Graphics& g, juce::Rectangle<float> box, bool forward, juce::Colour c)
+{
+    auto b = centredSquare(box, 0.0f);
+    g.setColour(c);
+    auto t = b.reduced(b.getWidth() * 0.10f, b.getHeight() * 0.22f);
+    const float tw = t.getWidth() * 0.56f;   // slight overlap → connected chevron look
+    juce::Path p;
+    if (forward)
+    {
+        p.addTriangle(t.getX(),          t.getY(), t.getX(),          t.getBottom(), t.getX() + tw,     t.getCentreY());
+        p.addTriangle(t.getRight() - tw, t.getY(), t.getRight() - tw, t.getBottom(), t.getRight(),      t.getCentreY());
+    }
+    else
+    {
+        p.addTriangle(t.getRight(),      t.getY(), t.getRight(),      t.getBottom(), t.getRight() - tw, t.getCentreY());
+        p.addTriangle(t.getX() + tw,     t.getY(), t.getX() + tw,     t.getBottom(), t.getX(),          t.getCentreY());
+    }
+    g.fillPath(p);
+}
+
+// ---- Keyboard-shortcuts reference overlay ----
+struct ShortcutRow { const char* keys; const char* action; };
+static const ShortcutRow kShortcuts[] = {
+    { "Space",            "Play / pause" },
+    { u8"←   →","Skip back / forward 10s" },
+    { "Home",             "Jump to the start" },
+    { u8"1 – 5",     "Solo Kick / Snare / Toms / Hats / Cymbals" },
+    { "0",                "Input" },
+    { u8"⌘ O",       "Open a file" },
+};
+
+class ShortcutsOverlay : public juce::Component
+{
+public:
+    explicit ShortcutsOverlay(std::function<void()> onClose) : onClose_(std::move(onClose))
+    {
+        setAlwaysOnTop(true);
+        closeBtn_.setButtonText("Got it");
+        closeBtn_.setColour(juce::TextButton::buttonColourId,  ISOPalette::Accent);
+        closeBtn_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
+        closeBtn_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
+        closeBtn_.onClick = [this] { if (onClose_) onClose_(); };
+        addAndMakeVisible(closeBtn_);
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        g.fillAll(juce::Colour(0xcc09090b));
+        auto card = cardBounds();
+        juce::DropShadow(juce::Colours::black.withAlpha(0.55f), 34, { 0, 12 })
+            .drawForRectangle(g, card.toNearestInt());
+        g.setColour(ISOPalette::Surface); g.fillRoundedRectangle(card, 14.0f);
+        g.setColour(ISOPalette::Border);  g.drawRoundedRectangle(card, 14.0f, 1.0f);
+
+        auto inner = card.reduced(28.0f, 24.0f);
+        g.setColour(ISOPalette::Text);
+        g.setFont(ISOLookAndFeel::font(18.0f, true));
+        g.drawText("Keyboard Shortcuts", inner.removeFromTop(26.0f).toNearestInt(),
+                   juce::Justification::topLeft);
+        inner.removeFromTop(14.0f);
+
+        for (const auto& sc : kShortcuts)
+        {
+            auto row = inner.removeFromTop(34.0f);
+            const auto keyStr = juce::String(juce::CharPointer_UTF8(sc.keys));
+
+            auto kf = ISOLookAndFeel::font(12.0f, true);
+            const float kw = juce::jmax(40.0f, kf.getStringWidthFloat(keyStr) + 20.0f);
+            auto badge = row.removeFromLeft(kw).reduced(0.0f, 4.0f);
+            g.setColour(ISOPalette::RowBg); g.fillRoundedRectangle(badge, 5.0f);
+            g.setColour(ISOPalette::Border); g.drawRoundedRectangle(badge.reduced(0.5f), 5.0f, 1.0f);
+            g.setColour(ISOPalette::Text);  g.setFont(kf);
+            g.drawText(keyStr, badge.toNearestInt(), juce::Justification::centred);
+
+            row.removeFromLeft(16.0f);
+            g.setColour(ISOPalette::TextDim); g.setFont(ISOLookAndFeel::font(13.0f));
+            g.drawText(sc.action, row.toNearestInt(), juce::Justification::centredLeft);
+        }
+    }
+
+    void resized() override
+    {
+        auto card = cardBounds().reduced(28.0f, 24.0f).toNearestInt();
+        closeBtn_.setBounds(card.removeFromBottom(34).removeFromRight(96));
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override
+    {
+        if (! cardBounds().contains(e.position.toFloat()))
+            if (onClose_) onClose_();
+    }
+
+private:
+    juce::Rectangle<float> cardBounds() const
+    {
+        const float w = 460.0f, h = 350.0f;
+        return { (getWidth() - w) * 0.5f, (getHeight() - h) * 0.5f, w, h };
+    }
+    std::function<void()> onClose_;
+    juce::TextButton closeBtn_;
+};
+} // namespace
+
 // ---- BPM estimation from detected drum hits ----
 static double estimateBpm(const std::vector<DrumHit>& hits, double sampleRate)
 {
@@ -68,6 +275,12 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
     p.separationRunning.store(true);
     p.separationProgress.store(0.0f);
 
+    // JUCE is built with JUCE_CATCH_UNHANDLED_EXCEPTIONS=0, so any exception that
+    // escapes run() terminates the host. Contain everything (separation, onset
+    // detection, allocation failures) here.
+    try
+    {
+
     juce::AudioBuffer<float> inputCopy;
     double sampleRate = 44100.0;
     {
@@ -79,7 +292,9 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
     if (threadShouldExit()) { p.separationRunning.store(false); return; }
 
     const float exponent = p.maskExponent.load();
-    auto result = p.getEngine().separate(inputCopy, sampleRate, &p.separationProgress, exponent);
+    const double inputDurSec = sampleRate > 0.0 ? inputCopy.getNumSamples() / sampleRate : 0.0;
+    auto result = p.getEngine().separate(inputCopy, sampleRate, &p.separationProgress, exponent,
+                                         [this]() { return threadShouldExit(); });
     inputCopy = juce::AudioBuffer<float>();
 
     if (threadShouldExit()) { p.separationRunning.store(false); return; }
@@ -114,7 +329,27 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
     p.separationProgress.store(1.0f);
     p.separationRunning.store(false);
 
+    // Anonymous, opt-in usage event (no audio/filenames — just coarse buckets).
+    {
+        const char* bucket = inputDurSec < 30  ? "0-30s"
+                           : inputDurSec < 90  ? "30-90s"
+                           : inputDurSec < 300 ? "90-300s" : "300s+";
+        juce::StringPairArray dims;
+        dims.set("durBucket", bucket);
+        dims.set("ok", "true");
+        p.getAnalytics().track("separate", dims);
+    }
+
     juce::MessageManager::callAsync(onDone_);
+    }
+    catch (const std::exception& e)
+    {
+        DBG("SeparationThread failed: " + juce::String(e.what()));
+        p.separationProgress.store(0.0f);
+        p.separationRunning.store(false);
+        // Notify the UI so it can leave the "processing" state gracefully.
+        juce::MessageManager::callAsync(onDone_);
+    }
 }
 
 // ============================================================================
@@ -124,7 +359,10 @@ void ISODrumsAudioProcessorEditor::SeparationThread::run()
 ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcessor& p)
     : AudioProcessorEditor(&p),
       audioProcessor_(p),
-      separationThread_(p, [this]() { onSeparationComplete(); })
+      // SafePointer guards against the async callback firing after this editor
+      // is destroyed (thread posts callAsync, editor closes, message dispatches).
+      separationThread_(p, [safe = juce::Component::SafePointer<ISODrumsAudioProcessorEditor>(this)]()
+                            { if (auto* ed = safe.getComponent()) ed->onSeparationComplete(); })
 {
     setLookAndFeel(&lookAndFeel_);
     formatManager_.registerBasicFormats();
@@ -163,7 +401,12 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     {
         juce::PopupMenu m;
         m.addItem(1, "Audio Settings...");
+        m.addItem(5, "Keyboard Shortcuts...");
         m.addItem(2, "License...");
+        m.addSeparator();
+        m.addItem(4, "Send anonymous usage stats",
+                  /*enabled=*/ true,
+                  /*ticked=*/  audioProcessor_.getAnalytics().isEnabled());
         m.addSeparator();
         m.addItem(3, "Clear All", fileLoaded_);
         m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&settingsButton_),
@@ -191,6 +434,17 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
                 {
                     clearAll();
                 }
+                else if (result == 4)
+                {
+                    // Toggle opt-in analytics.
+                    auto& a = audioProcessor_.getAnalytics();
+                    a.setEnabled(!a.isEnabled());
+                    a.markConsentAsked();
+                }
+                else if (result == 5)
+                {
+                    showShortcutsOverlay();
+                }
             });
     };
     addAndMakeVisible(settingsButton_);
@@ -217,7 +471,7 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     for (int i = 0; i < kNumRows; ++i)
     {
         soloButtons_[i].setButtonText("");
-        soloButtons_[i].setTooltip("Solo / play this stem (click again to pause)");
+        soloButtons_[i].setTooltip("Play / pause this stem (continues from the current position)");
         soloButtons_[i].setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
         soloButtons_[i].setEnabled(false);
         const int idx = i;
@@ -267,6 +521,7 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
                         if (!chooser.browseForFileToSave(true)) return;
 
                         const juce::AudioBuffer<float>* buf = nullptr;
+                        bool wroteWav = false;
                         {
                             juce::ScopedLock sl(audioProcessor_.resultLock);
                             switch (stemIdx) {
@@ -289,8 +544,13 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
                                                     static_cast<unsigned int>(buf->getNumChannels()),
                                                     16, {}, 0));
                             if (writer)
+                            {
                                 writer->writeFromAudioSampleBuffer(*buf, 0, buf->getNumSamples());
+                                wroteWav = true;
+                            }
                         }
+                        if (wroteWav)
+                            audioProcessor_.getAnalytics().track("export_wav");
                     }
                     else if (result == 2)
                     {
@@ -329,6 +589,22 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     exportMidiButton_.onClick = [this] { showMidiDialog(); };
     addAndMakeVisible(exportMidiButton_);
 
+    // ---- Global transport (skip -10s / play-pause / skip +10s) ----
+    for (auto* b : { &prevBtn_, &playBtn_, &nextBtn_ })
+    {
+        b->setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+        b->setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+        b->setEnabled(false);
+        addAndMakeVisible(*b);
+        b->setVisible(false);   // shown once a track is loaded (see timerCallback)
+    }
+    prevBtn_.setTooltip("Back 10 seconds");
+    playBtn_.setTooltip("Play / pause");
+    nextBtn_.setTooltip("Forward 10 seconds");
+    prevBtn_.onClick = [this] { skipSeconds(-10.0); };
+    nextBtn_.onClick = [this] { skipSeconds( 10.0); };
+    playBtn_.onClick = [this] { globalPlayPause(); };
+
     progressBar_.setColour(juce::ProgressBar::foregroundColourId, kAccent);
     progressBar_.setVisible(false);
     addAndMakeVisible(progressBar_);
@@ -358,6 +634,35 @@ ISODrumsAudioProcessorEditor::ISODrumsAudioProcessorEditor(ISODrumsAudioProcesso
     setResizeLimits(720, 520, 1920, 1400);
     setSize(960, 700);
     startTimerHz(24);
+
+    // Global keyboard shortcuts (space = play/pause, ←/→ = skip). Keep focus on the
+    // editor itself so child controls don't swallow the keys.
+    setWantsKeyboardFocus(true);
+    for (auto* c : getChildren())
+        c->setWantsKeyboardFocus(false);
+    juce::MessageManager::callAsync([safe = juce::Component::SafePointer<ISODrumsAudioProcessorEditor>(this)]
+                                    { if (safe != nullptr) safe->grabKeyboardFocus(); });
+
+    // Anonymous usage event for this session (no-op unless the user opted in).
+    audioProcessor_.getAnalytics().track("launch");
+
+    // One-time, in-app opt-in prompt. Standalone only, so it never interferes
+    // with a plugin host or auval scanning.
+    if (! audioProcessor_.getAnalytics().consentAsked()
+        && juce::StandalonePluginHolder::getInstance() != nullptr)
+    {
+        auto* overlay = new ConsentOverlay([this](bool yes)
+        {
+            audioProcessor_.getAnalytics().setEnabled(yes);
+            audioProcessor_.getAnalytics().markConsentAsked();
+            // Defer deletion so we're not tearing down the overlay inside its own callback.
+            juce::MessageManager::callAsync([this] { consentOverlay_.reset(); });
+        });
+        consentOverlay_.reset(overlay);
+        addAndMakeVisible(*overlay);
+        overlay->setBounds(getLocalBounds());
+        overlay->toFront(true);
+    }
 }
 
 ISODrumsAudioProcessorEditor::~ISODrumsAudioProcessorEditor()
@@ -388,6 +693,11 @@ ISODrumsAudioProcessorEditor::~ISODrumsAudioProcessorEditor()
 
 void ISODrumsAudioProcessorEditor::resized()
 {
+    if (consentOverlay_ != nullptr)
+        consentOverlay_->setBounds(getLocalBounds());
+    if (shortcutsOverlay_ != nullptr)
+        shortcutsOverlay_->setBounds(getLocalBounds());
+
     constexpr int kPadH        = 50;
     constexpr int kHeaderH     = 36;
     constexpr int kRowGap      = 2;
@@ -422,26 +732,18 @@ void ISODrumsAudioProcessorEditor::resized()
     content.removeFromTop(balancedGap);
 
     // --- Header layout ---
-    // ISO Drums icon (painted): reserve space at far right
-    const int isoIconW = (int)(35.f * (425.f / 476.f));
-    const int isoLeftX = getWidth() - kPadH - isoIconW;
-    header.removeFromRight(isoIconW);
-
-    // Settings zone + load button from the right
-    constexpr int kSettingsZone = 48;
-    header.removeFromRight(kSettingsZone);
-    constexpr int kLoadW = 105;
-    loadButton_.setBounds(header.removeFromRight(kLoadW).reduced(0, 2));
-
-    // Settings button: centered between load right and ISO icon left
+    // Settings gear at the far right (the old logo slot), Load Track to its left.
+    constexpr int kSettSz  = 28;
+    constexpr int kSettGap = 16;
+    constexpr int kLoadW   = 105;
     {
-        int midX = (loadButton_.getRight() + isoLeftX) / 2;
-        constexpr int kSettSz = 28;
-        settingsButton_.setBounds(
-            juce::Rectangle<int>(midX - kSettSz / 2,
-                                 header.getY() + (header.getHeight() - kSettSz) / 2,
-                                 kSettSz, kSettSz));
+        auto gearCol = header.removeFromRight(kSettSz);
+        settingsButton_.setBounds(gearCol.getX(),
+                                  header.getY() + (header.getHeight() - kSettSz) / 2,
+                                  kSettSz, kSettSz);
     }
+    header.removeFromRight(kSettGap);
+    loadButton_.setBounds(header.removeFromRight(kLoadW).reduced(0, 2));
 
     // Volume slider
     {
@@ -472,6 +774,20 @@ void ISODrumsAudioProcessorEditor::resized()
         auto isoLabelArea = tb.removeFromRight(isoLabelW);
         isoLabelArea = isoLabelArea.withSizeKeepingCentre(isoLabelW, 20);
         isolationLabel_.setBounds(isoLabelArea);
+
+        // Global transport — centered in the middle zone (shares space with the
+        // progress bar, which only shows while separating).
+        {
+            const int btnW = 32, btnH = 26, gap = 8;
+            const int clusterW = btnW * 3 + gap * 2;
+            juce::Rectangle<int> cluster(tb.getCentreX() - clusterW / 2,
+                                         tb.getCentreY() - btnH / 2, clusterW, btnH);
+            prevBtn_.setBounds(cluster.removeFromLeft(btnW));
+            cluster.removeFromLeft(gap);
+            playBtn_.setBounds(cluster.removeFromLeft(btnW));
+            cluster.removeFromLeft(gap);
+            nextBtn_.setBounds(cluster.removeFromLeft(btnW));
+        }
 
         // Progress bar: fills the middle
         auto progressArea = tb;
@@ -587,18 +903,13 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
                           svgW, svgH), 1.f);
     }
 
-    // ── Toolbar: progress status (only visible during/after separation) ─────
+    // ── Toolbar: processing status (center; transport is hidden while this shows;
+    //    the completed "Done" state lives on the Separate button instead) ──────
     {
         auto pbarBounds = progressBar_.getBounds();
         const bool separating = audioProcessor_.separationRunning.load();
 
-        if (stemsDone_)
-        {
-            g.setColour(juce::Colour(0xff44cc66));
-            g.setFont(ISOLookAndFeel::font(10.f));
-            g.drawText("Done", pbarBounds, juce::Justification::centred);
-        }
-        else if (separating || progressValue_ > 0.01)
+        if (! stemsDone_ && (separating || progressValue_ > 0.01))
         {
             int pct = juce::roundToInt(progressValue_ * 100.0);
             g.setColour(ISOPalette::MutedLt);
@@ -635,17 +946,8 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
                    juce::Justification::bottomLeft);
     }
 
-    // ISO Drums icon
-    {
-        const float iconH = 35.f;
-        const float iconW = iconH * (425.f / 476.f);
-        drawImageInRect(g, BinaryData::logoisodrumsiconwhite_png,
-                        BinaryData::logoisodrumsiconwhite_pngSize,
-                        juce::Rectangle<float>(
-                            contentRight - iconW,
-                            headerY + (headerH - iconH) * 0.5f,
-                            iconW, iconH), 1.f);
-    }
+    // ISO Drums icon (top-right) — hidden per design.
+    // (Layout still reserves its slot; the gear sits to its left.)
 
     // Settings gear icon (20% smaller than previous ~24px → ~19px)
     {
@@ -754,9 +1056,12 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
         const bool hasStem = (i == 0) ? fileLoaded_ : stemsDone_;
         const float iconAlpha = hasStem ? 0.75f : 0.25f;
 
-        auto soloBounds = soloButtons_[i].getBounds().toFloat().reduced(5.f);
-        drawSVGInRect(g, BinaryData::soloicon_svg, BinaryData::soloicon_svgSize,
-                      soloBounds, (soloStemIndex_ == i) ? 1.f : iconAlpha);
+        auto* activeT = audioProcessor_.activeTransport.load();
+        const bool playingThis = (soloStemIndex_ == i) && activeT != nullptr && activeT->isPlaying();
+        auto soloBounds = soloButtons_[i].getBounds().toFloat().reduced(8.f);
+        const juce::Colour iconCol = (soloStemIndex_ == i) ? kRowColours[i] : kText;
+        drawPlayPause(g, soloBounds, playingThis,
+                      iconCol.withAlpha(hasStem ? (soloStemIndex_ == i ? 1.0f : 0.8f) : 0.28f));
 
         auto saveBounds = saveButtons_[i].getBounds().toFloat().reduced(5.f);
         drawSVGInRect(g, BinaryData::saveicon_svg, BinaryData::saveicon_svgSize,
@@ -771,6 +1076,19 @@ void ISODrumsAudioProcessorEditor::paint(juce::Graphics& g)
             g.fillRect(rowBounds_[i].getX(), gapY,
                        28, gapH);
         }
+    }
+
+    // ── Global transport icons ────────────────────────────────────────────────
+    if (prevBtn_.isVisible())
+    {
+        const bool ready = fileLoaded_;
+        auto* gt = audioProcessor_.activeTransport.load();
+        const bool playing = gt != nullptr && gt->isPlaying();
+        const juce::Colour on  = kText.withAlpha(ready ? 0.9f : 0.25f);
+        const juce::Colour hot = kAccent.withAlpha(ready ? 1.0f : 0.25f);
+        drawSkip(g, prevBtn_.getBounds().toFloat().reduced(4.f), false, on);
+        drawPlayPause(g, playBtn_.getBounds().toFloat().reduced(4.f), playing, hot);
+        drawSkip(g, nextBtn_.getBounds().toFloat().reduced(4.f), true,  on);
     }
 }
 
@@ -931,8 +1249,10 @@ void ISODrumsAudioProcessorEditor::loadFile(const juce::File& file)
     progressValue_ = 0.0;
     audioProcessor_.separationProgress.store(0.0f);
 
+    setSeparateButtonDone(false);
     separateButton_.setEnabled(audioProcessor_.getEngine().isReady());
     soloButtons_[0].setEnabled(true);
+    for (auto* b : { &prevBtn_, &playBtn_, &nextBtn_ }) b->setEnabled(true);   // input is playable
     for (int i = 1; i < kNumRows; ++i)
     {
         soloButtons_[i].setEnabled(false);
@@ -993,6 +1313,7 @@ void ISODrumsAudioProcessorEditor::clearAll()
     progressValue_ = 0.0;
     audioProcessor_.separationProgress.store(0.0f);
 
+    setSeparateButtonDone(false);
     separateButton_.setEnabled(false);
     exportWavsButton_.setEnabled(false);
     exportMidiButton_.setEnabled(false);
@@ -1013,6 +1334,7 @@ void ISODrumsAudioProcessorEditor::startSeparation()
 {
     if (audioProcessor_.separationRunning.load()) return;
 
+    setSeparateButtonDone(false);           // reset label while (re-)processing
     separateButton_.setEnabled(false);
     exportWavsButton_.setEnabled(false);
     exportMidiButton_.setEnabled(false);
@@ -1031,6 +1353,7 @@ void ISODrumsAudioProcessorEditor::onSeparationComplete()
 
     stemsDone_ = true;
     separateButton_.setEnabled(true);
+    setSeparateButtonDone(true);            // Separate button becomes the green "Done" indicator
     exportWavsButton_.setEnabled(true);
     exportMidiButton_.setEnabled(true);
 
@@ -1125,25 +1448,125 @@ void ISODrumsAudioProcessorEditor::setSolo(int stemIndex)
         return;
     }
 
-    // Switching to a different stem or deselecting
+    // Switching to a different stem: keep the current play position so it picks
+    // up where the track is instead of restarting from the top.
+    double posSec = -1.0;
     if (current != nullptr)
+    {
+        posSec = current->getCurrentPosition();
         current->stop();
+    }
     audioProcessor_.activeTransport.store(nullptr);
 
     soloStemIndex_ = stemIndex;
-    playheadPos_ = 0.0;
 
     if (stemIndex < 0)
     {
+        playheadPos_ = 0.0;
         repaint();
         return;
     }
 
     auto* chosen = targets[stemIndex];
-    chosen->setPosition(0.0);
+    const double len = chosen->getLengthInSeconds();
+    if (posSec < 0.0)                       // nothing was playing — use the visible playhead
+        posSec = playheadPos_ * len;
+    if (len > 0.0)
+        posSec = juce::jlimit(0.0, len, posSec);
+
+    chosen->setPosition(posSec);
     chosen->start();
     audioProcessor_.activeTransport.store(chosen);
+    playheadPos_ = (len > 0.0) ? posSec / len : 0.0;
 
+    repaint();
+}
+
+// ---- Global transport ----------------------------------------------------
+
+void ISODrumsAudioProcessorEditor::setSeparateButtonDone(bool done)
+{
+    if (done)
+    {
+        separateButton_.setButtonText("Done");
+        separateButton_.setColour(juce::TextButton::buttonColourId,  ISOPalette::RowBg);
+        separateButton_.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff44cc66));
+        separateButton_.setColour(juce::TextButton::textColourOnId,  juce::Colour(0xff44cc66));
+        separateButton_.setTooltip("Separated. Click to run again (e.g. after changing Isolation).");
+    }
+    else
+    {
+        separateButton_.setButtonText("Separate");
+        separateButton_.setColour(juce::TextButton::buttonColourId,  kAccent);
+        separateButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
+        separateButton_.setColour(juce::TextButton::textColourOnId,  juce::Colours::black);
+        separateButton_.setTooltip("Run AI stem separation on the loaded track");
+    }
+    separateButton_.repaint();
+}
+
+void ISODrumsAudioProcessorEditor::showShortcutsOverlay()
+{
+    if (shortcutsOverlay_ != nullptr)
+        return;
+    auto* ov = new ShortcutsOverlay([this]
+        { juce::MessageManager::callAsync([this] { shortcutsOverlay_.reset(); }); });
+    shortcutsOverlay_.reset(ov);
+    addAndMakeVisible(*ov);
+    ov->setBounds(getLocalBounds());
+    ov->toFront(true);
+}
+
+juce::AudioTransportSource* ISODrumsAudioProcessorEditor::rowTransport(int row)
+{
+    juce::AudioTransportSource* targets[kNumRows] = {
+        &audioProcessor_.transportInput, &audioProcessor_.transportKick,
+        &audioProcessor_.transportSnare, &audioProcessor_.transportToms,
+        &audioProcessor_.transportHihat, &audioProcessor_.transportCymbals,
+    };
+    return (row >= 0 && row < kNumRows) ? targets[row] : nullptr;
+}
+
+void ISODrumsAudioProcessorEditor::globalPlayPause()
+{
+    if (auto* t = audioProcessor_.activeTransport.load())
+    {
+        if (t->isPlaying()) t->stop();     // pause — keeps position
+        else                t->start();    // resume from where it is
+        repaint();
+        return;
+    }
+
+    // Nothing active: play the selected row (or the input) from the playhead.
+    int idx = (soloStemIndex_ >= 0 && rowHasAudio(soloStemIndex_)) ? soloStemIndex_
+            : (rowHasAudio(0) ? 0 : -1);
+    if (idx >= 0)
+        setSolo(idx);   // setSolo resumes from playheadPos_ when idle
+}
+
+void ISODrumsAudioProcessorEditor::skipSeconds(double delta)
+{
+    auto* t = audioProcessor_.activeTransport.load();
+    int   idx = -1;
+
+    if (t == nullptr)
+    {
+        idx = (soloStemIndex_ >= 0 && rowHasAudio(soloStemIndex_)) ? soloStemIndex_
+            : (rowHasAudio(0) ? 0 : -1);
+        if (idx < 0) return;
+        t = rowTransport(idx);
+        soloStemIndex_ = idx;
+    }
+    if (t == nullptr) return;
+
+    const double len = t->getLengthInSeconds();
+    const double cur = (audioProcessor_.activeTransport.load() == t)
+                         ? t->getCurrentPosition()
+                         : playheadPos_ * len;                 // idle: from visible playhead
+    const double pos = juce::jlimit(0.0, len, cur + delta);
+
+    t->setPosition(pos);                                       // seek (live if playing, else armed)
+    playheadPos_ = (len > 0.0) ? pos / len : 0.0;
     repaint();
 }
 
@@ -1272,8 +1695,11 @@ void ISODrumsAudioProcessorEditor::exportMidi(const MidiExportSettings& settings
         DrumMap::DEFAULT_HIHAT, DrumMap::DEFAULT_CYMBALS
     };
     if (exporter.exportToFile(hitsCopy, outFile, settings, stemNotes))
+    {
+        audioProcessor_.getAnalytics().track("export_midi");
         juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
             "Export complete", "MIDI saved to:\n" + outFile.getFullPathName());
+    }
     else
         juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
             "Export failed", "Could not write MIDI file.");
@@ -1289,6 +1715,12 @@ void ISODrumsAudioProcessorEditor::timerCallback()
 
     bool showProgress = audioProcessor_.separationRunning.load() || (progressValue_ > 0.01 && !stemsDone_);
     progressBar_.setVisible(showProgress);
+
+    // Transport shares the middle zone with the progress bar — show it only when
+    // a track is loaded and we're not mid-separation.
+    const bool showTransport = fileLoaded_ && ! showProgress;
+    for (auto* b : { &prevBtn_, &playBtn_, &nextBtn_ })
+        if (b->isVisible() != showTransport) b->setVisible(showTransport);
 
     if (auto* t = audioProcessor_.activeTransport.load())
     {
@@ -1367,14 +1799,58 @@ juce::File ISODrumsAudioProcessorEditor::writeStemToTempFile(int rowIndex)
     return outFile;
 }
 
+bool ISODrumsAudioProcessorEditor::keyPressed(const juce::KeyPress& key)
+{
+    // Cmd+O opens a file — works even with nothing loaded.
+    if (key == juce::KeyPress('o', juce::ModifierKeys::commandModifier, 0))
+    {
+        loadButton_.triggerClick();
+        return true;
+    }
+
+    if (! fileLoaded_)
+        return false;
+
+    if (key == juce::KeyPress::spaceKey) { globalPlayPause(); return true; }
+    if (key == juce::KeyPress::leftKey)  { skipSeconds(-10.0); return true; }
+    if (key == juce::KeyPress::rightKey) { skipSeconds( 10.0); return true; }
+
+    // Home — jump to the start.
+    if (key == juce::KeyPress::homeKey)
+    {
+        if (auto* t = audioProcessor_.activeTransport.load())
+            t->setPosition(0.0);
+        playheadPos_ = 0.0;
+        repaint();
+        return true;
+    }
+
+    // 0 = input, 1–5 = kick / snare / toms / hats / cymbals.
+    if (! key.getModifiers().isCommandDown() && ! key.getModifiers().isCtrlDown())
+    {
+        for (int i = 0; i <= 5; ++i)
+        {
+            if (key.getKeyCode() == ('0' + i))
+            {
+                if (rowHasAudio(i))
+                    setSolo(i);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void ISODrumsAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
 {
+    grabKeyboardFocus();   // keep keyboard shortcuts working after any click
     dragSourceRow_ = -1;
     int row = hitTestWaveformRow(e.getPosition());
 
-    // Click-to-seek: if an active transport is playing and the click is on a
-    // waveform row that has audio, compute the normalized position and seek.
-    if (row >= 0 && rowHasAudio(row) && soloStemIndex_ >= 0)
+    // Click-to-seek: clicking a waveform row that has audio sets the playhead
+    // there. If something is playing it seeks live; if idle it arms that row at
+    // the clicked spot, so you can click into a spot and then hit play.
+    if (row >= 0 && rowHasAudio(row))
     {
         constexpr int kIconCol    = 28;
         constexpr int kColorStrip = 3;
@@ -1387,14 +1863,15 @@ void ISODrumsAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
         {
             double norm = (double)(e.getPosition().x - waveR.getX()) / (double)waveR.getWidth();
             norm = juce::jlimit(0.0, 1.0, norm);
+            playheadPos_ = norm;
 
             if (auto* t = audioProcessor_.activeTransport.load())
-            {
-                t->setPosition(norm * t->getLengthInSeconds());
-                playheadPos_ = norm;
-                repaint();
-                return;
-            }
+                t->setPosition(norm * t->getLengthInSeconds());   // seek the playing stem
+            else
+                soloStemIndex_ = row;                              // idle: arm this row here
+
+            repaint();
+            return;
         }
     }
 

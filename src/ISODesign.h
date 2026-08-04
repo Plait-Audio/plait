@@ -60,6 +60,15 @@ public:
                            const juce::String& shortcutKeyText,
                            const juce::Drawable* icon,
                            const juce::Colour* textColour) override;
+    void getIdealPopupMenuItemSize(const juce::String& text, bool isSeparator,
+                                   int standardHeight, int& idealWidth, int& idealHeight) override;
+    int getPopupMenuBorderSize() override;
+
+    // Tooltips
+    juce::Rectangle<int> getTooltipBounds(const juce::String& tipText,
+                                          juce::Point<int> screenPos,
+                                          juce::Rectangle<int> parentArea) override;
+    void drawTooltip(juce::Graphics&, const juce::String& text, int w, int h) override;
 
     // Typography
     juce::Typeface::Ptr getTypefaceForFont(const juce::Font&) override;

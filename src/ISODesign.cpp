@@ -256,7 +256,7 @@ void ISOLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int w, int h)
 
 void ISOLookAndFeel::drawPopupMenuItem(juce::Graphics& g,
                                         const juce::Rectangle<int>& area,
-                                        bool /*isSeparator*/, bool isActive,
+                                        bool isSeparator, bool isActive,
                                         bool isHighlighted, bool isTicked,
                                         bool /*hasSubMenu*/,
                                         const juce::String& text,
@@ -264,21 +264,93 @@ void ISOLookAndFeel::drawPopupMenuItem(juce::Graphics& g,
                                         const juce::Drawable* /*icon*/,
                                         const juce::Colour* /*textColour*/)
 {
+    if (isSeparator)
+    {
+        auto line = area.reduced(12, 0).withHeight(1).withY(area.getCentreY());
+        g.setColour(Border);
+        g.fillRect(line);
+        return;
+    }
+
+    // Soft, inset rounded highlight instead of an edge-to-edge gold fill.
     if (isHighlighted && isActive)
     {
-        g.setColour(Accent);
-        g.fillRect(area);
+        g.setColour(Hover);
+        g.fillRoundedRectangle(area.reduced(5, 2).toFloat(), 5.0f);
     }
 
-    g.setColour(isHighlighted ? juce::Colours::white : (isActive ? Text : Muted));
-    g.setFont(font(11.f));
-    g.drawText(text, area.reduced(8, 0), juce::Justification::centredLeft);
+    g.setColour(! isActive ? Muted : Text);
+    g.setFont(font(12.f));
+    g.drawText(text, area.reduced(17, 0).withTrimmedRight(22), juce::Justification::centredLeft);
 
+    // Gold dot on the right when the item is ticked (e.g. the analytics toggle).
     if (isTicked)
     {
-        g.setColour(isHighlighted ? juce::Colours::white : Accent);
-        g.setFont(font(10.f));
-        g.drawText(juce::String(juce::CharPointer_UTF8("\xe2\x80\xa2")),
-                   area.withTrimmedLeft(area.getWidth() - 20), juce::Justification::centred);
+        const float d = 6.0f;
+        g.setColour(Accent);
+        g.fillEllipse((float) area.getRight() - 18.0f, area.getCentreY() - d * 0.5f, d, d);
     }
+}
+
+void ISOLookAndFeel::getIdealPopupMenuItemSize(const juce::String& text, bool isSeparator,
+                                               int /*standardHeight*/, int& idealWidth, int& idealHeight)
+{
+    if (isSeparator)
+    {
+        idealWidth = 60;
+        idealHeight = 11;
+        return;
+    }
+    idealWidth  = (int) std::ceil (font(12.f).getStringWidthFloat(text)) + 56;
+    idealHeight = 30;
+}
+
+int ISOLookAndFeel::getPopupMenuBorderSize()
+{
+    return 6;
+}
+
+// ── Tooltips ───────────────────────────────────────────────────────────────────
+juce::Rectangle<int> ISOLookAndFeel::getTooltipBounds(const juce::String& tipText,
+                                                      juce::Point<int> screenPos,
+                                                      juce::Rectangle<int> parentArea)
+{
+    const auto f = font(11.5f);
+    const int maxW = 300;
+
+    juce::AttributedString s;
+    s.append(tipText, f, ISOPalette::Text);
+    juce::TextLayout tl;
+    tl.createLayout(s, (float) maxW);
+
+    const int w = juce::jmin(maxW, (int) std::ceil(tl.getWidth())) + 22;
+    const int h = (int) std::ceil(tl.getHeight()) + 14;
+
+    // Centered on the cursor, above the control (below only if there's no room).
+    const int x = screenPos.x - w / 2;
+    const int y = (screenPos.y - h - 14 >= parentArea.getY()) ? screenPos.y - h - 14
+                                                              : screenPos.y + 22;
+
+    return juce::Rectangle<int>(x, y, w, h).constrainedWithin(parentArea);
+}
+
+void ISOLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, int w, int h)
+{
+    auto bounds = juce::Rectangle<float>(0.0f, 0.0f, (float) w, (float) h);
+
+    // The JUCE tooltip window is opaque, so every pixel MUST be painted or the
+    // uncovered corners show through as a white box. Fill the whole area with the
+    // app's deepest background (it disappears against the dark UI), then draw the
+    // rounded chip on top. The window's own drop shadow provides the lift.
+    g.fillAll(ISOPalette::Bg);
+
+    g.setColour(ISOPalette::Darkest);
+    g.fillRoundedRectangle(bounds, 6.0f);
+    g.setColour(ISOPalette::Border);
+    g.drawRoundedRectangle(bounds.reduced(0.5f), 6.0f, 1.0f);
+
+    g.setColour(ISOPalette::Text);
+    g.setFont(font(11.5f));
+    g.drawFittedText(text, juce::Rectangle<int>(w, h).reduced(11, 6),
+                     juce::Justification::centred, 3);
 }
