@@ -1,9 +1,11 @@
 build/
+build-*/
 dist/
 third_party/
 
 # Neural network model weights (distributed separately, not in repo)
 Resources/*.pt
+Resources/onnx/*.onnx
 
 # macOS
 .DS_Store
@@ -14,9 +16,15 @@ Resources/*.pt
 .vscode/
 .idea/
 
+# Large local media not used by the shipped site (test track, source hero video)
+public/thesecondtime-drums.mp3
+public/ISODrums-bg.mov
+
 # Node
 node_modules/
 
 # Python bytecode
 __pycache__/
 *.pyc
+.vercel
+.env*

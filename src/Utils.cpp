@@ -2,80 +2,134 @@
 
 #include <cmath>
 
-Utils::Utils(int nFft, int winLength, int hopLength, float /*power*/, bool /*center*/)
+namespace
+{
+    constexpr float kTwoPi = 6.283185307179586f;
+}
+
+Utils::Utils(int nFft, int winLength, int hopLength)
     : nFft_     (nFft),
       winLength_(winLength == 0 ? nFft : winLength),
-      hopLength_(hopLength == 0 ? (winLength == 0 ? nFft / 4 : winLength / 4) : hopLength),
-      hannWin_  (torch::hann_window(winLength_ == 0 ? nFft : winLength_,
-                                    true,
-                                    at::TensorOptions().dtype(at::kFloat).requires_grad(false)))
+      hopLength_(hopLength == 0 ? (winLength == 0 ? nFft / 4 : winLength / 4) : hopLength)
 {
+    // periodic Hann (matches torch.hann_window(N, periodic=true)):
+    //   w[n] = 0.5 - 0.5 * cos(2*pi*n / N)
+    window_.resize (static_cast<size_t> (winLength_));
+    for (int n = 0; n < winLength_; ++n)
+        window_[(size_t) n] = 0.5f - 0.5f * std::cos (kTwoPi * (float) n / (float) winLength_);
+
+    fft_ = std::make_unique<juce::dsp::FFT> ((int) std::log2 ((double) nFft_));
 }
 
-// --------------------------------------------------------------------------
-// Private helpers
-// --------------------------------------------------------------------------
-
-torch::Tensor Utils::padStftInput(const torch::Tensor& x) const
+int Utils::reflectIndex (int idx, int len) noexcept
 {
-    const int last = static_cast<int>(x.sizes().back());
+    if (len <= 1)
+        return 0;
 
-    // pad_len = (-(last - winLength_) % hopLength_) % winLength_
-    int mod = -(last - winLength_) % hopLength_;
-    if (mod < 0) mod += hopLength_;
+    const int period = 2 * (len - 1);
+    idx %= period;
+    if (idx < 0)
+        idx += period;
+    if (idx >= len)
+        idx = period - idx;
+    return idx;
+}
+
+std::vector<float> Utils::padStftInput (const float* x, int numSamples) const
+{
+    // pad_len = (-(last - winLength_) mod hop) mod winLength_
+    int mod = (-(numSamples - winLength_)) % hopLength_;
+    if (mod < 0)
+        mod += hopLength_;
     const int padLen = mod % winLength_;
 
-    if (padLen == 0)
-        return x;
-
-    auto xShape = x.sizes();
-    torch::Tensor padding = torch::zeros({ xShape[0], padLen });
-    return torch::cat({ x, padding }, 1);
+    std::vector<float> out (static_cast<size_t> (numSamples + padLen), 0.0f);
+    std::copy (x, x + numSamples, out.begin());
+    return out;
 }
 
-torch::Tensor Utils::stft(const torch::Tensor& x) const
+int Utils::stft (const float* samples, int numSamples,
+                 std::vector<float>& magOut, std::vector<float>& phaseOut) const
 {
-    // torch::stft signature (LibTorch 2.5):
-    //   stft(input, n_fft, hop_length, win_length, window,
-    //        center, pad_mode, normalized, onesided, return_complex)
-    return torch::stft(x, nFft_, hopLength_, winLength_,
-                       hannWin_,
-                       /*center=*/true,
-                       /*pad_mode=*/"reflect",
-                       /*normalized=*/false,
-                       /*onesided=*/true,
-                       /*return_complex=*/true);
+    const int pad       = nFft_ / 2;                 // center padding
+    const int paddedLen = numSamples + 2 * pad;
+    const int F         = numFreqBins();
+    const int T         = 1 + (paddedLen - nFft_) / hopLength_;
+
+    magOut.assign  (static_cast<size_t> (F * T), 0.0f);
+    phaseOut.assign(static_cast<size_t> (F * T), 0.0f);
+
+    std::vector<juce::dsp::Complex<float>> in  ((size_t) nFft_);
+    std::vector<juce::dsp::Complex<float>> out ((size_t) nFft_);
+
+    for (int i = 0; i < T; ++i)
+    {
+        const int start = i * hopLength_;            // in padded coordinates
+        for (int n = 0; n < nFft_; ++n)
+        {
+            const int oi = reflectIndex (start + n - pad, numSamples);
+            in[(size_t) n] = { samples[oi] * window_[(size_t) n], 0.0f };
+        }
+
+        fft_->perform (in.data(), out.data(), false);   // forward, unnormalised
+
+        for (int f = 0; f < F; ++f)
+        {
+            const auto& c = out[(size_t) f];
+            magOut  [(size_t) (f * T + i)] = std::sqrt (c.real() * c.real() + c.imag() * c.imag());
+            phaseOut[(size_t) (f * T + i)] = std::atan2 (c.imag(), c.real());
+        }
+    }
+
+    return T;
 }
 
-torch::Tensor Utils::istft(const torch::Tensor& x, int trimLength) const
+void Utils::istft (const float* mag, const float* phase,
+                   int numFrames, int outLength, std::vector<float>& out) const
 {
-    // torch::istft signature (LibTorch 2.5):
-    //   istft(input, n_fft, hop_length, win_length, window,
-    //         center, normalized, onesided, length, return_complex)
-    return torch::istft(x, nFft_, hopLength_, winLength_, hannWin_,
-                        /*center=*/true,
-                        /*normalized=*/false,
-                        /*onesided=*/true,
-                        /*length=*/trimLength,
-                        /*return_complex=*/false);
-}
+    const int pad       = nFft_ / 2;
+    const int F         = numFreqBins();
+    const int T         = numFrames;
+    const int paddedLen = nFft_ + (T - 1) * hopLength_;
 
-// --------------------------------------------------------------------------
-// Public API
-// --------------------------------------------------------------------------
+    std::vector<double> acc ((size_t) paddedLen, 0.0);
+    std::vector<double> env ((size_t) paddedLen, 0.0);
 
-torch::Tensor Utils::batchStft(const torch::Tensor& x, torch::Tensor& stftPhaseOut, bool pad) const
-{
-    torch::Tensor xPadded = pad ? padStftInput(x) : x;
+    std::vector<float> w2 ((size_t) nFft_);
+    for (int n = 0; n < nFft_; ++n)
+        w2[(size_t) n] = window_[(size_t) n] * window_[(size_t) n];
 
-    torch::Tensor S = stft(xPadded);     // complex [channels, F, T]
+    std::vector<juce::dsp::Complex<float>> spec ((size_t) nFft_);
+    std::vector<juce::dsp::Complex<float>> time ((size_t) nFft_);
 
-    stftPhaseOut = torch::angle(S);      // [channels, F, T]
-    return torch::abs(S);                // magnitude [channels, F, T]
-}
+    for (int i = 0; i < T; ++i)
+    {
+        // one-sided bins -> polar
+        for (int f = 0; f < F; ++f)
+        {
+            const float m = mag  [(size_t) (f * T + i)];
+            const float p = phase[(size_t) (f * T + i)];
+            spec[(size_t) f] = { m * std::cos (p), m * std::sin (p) };
+        }
+        // Hermitian mirror for the negative frequencies
+        for (int f = F; f < nFft_; ++f)
+            spec[(size_t) f] = std::conj (spec[(size_t) (nFft_ - f)]);
 
-torch::Tensor Utils::batchIstft(const torch::Tensor& mag, const torch::Tensor& phase, int trimLength) const
-{
-    torch::Tensor S   = torch::polar(mag, phase);   // complex [channels, F, T]
-    return istft(S, trimLength);                     // [channels, samples]
+        fft_->perform (spec.data(), time.data(), true);   // inverse, scaled by 1/N
+
+        const int start = i * hopLength_;
+        for (int n = 0; n < nFft_; ++n)
+        {
+            acc[(size_t) (start + n)] += (double) (time[(size_t) n].real() * window_[(size_t) n]);
+            env[(size_t) (start + n)] += (double) w2[(size_t) n];
+        }
+    }
+
+    out.assign ((size_t) outLength, 0.0f);
+    for (int p = 0; p < outLength; ++p)
+    {
+        const int idx = p + pad;                          // strip center padding
+        const double e = env[(size_t) idx] > 1e-11 ? env[(size_t) idx] : 1.0;
+        out[(size_t) p] = (float) (acc[(size_t) idx] / e);
+    }
 }

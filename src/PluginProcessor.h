@@ -7,6 +7,7 @@
 #include "SeparationEngine.h"
 #include "DrumHit.h"
 #include "LicenseManager.h"
+#include "Analytics.h"
 
 class ISODrumsAudioProcessor : public juce::AudioProcessor
 {
@@ -44,6 +45,7 @@ public:
     // ---- Engine access ----
     SeparationEngine& getEngine()         { return engine_; }
     LicenseManager&   getLicenseManager() { return licenseManager_; }
+    Analytics&        getAnalytics()      { return analytics_; }
 
     // ---- Shared state (accessed from editor + worker thread) ----
 
@@ -81,6 +83,7 @@ public:
 private:
     SeparationEngine engine_;
     LicenseManager   licenseManager_;
+    Analytics        analytics_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ISODrumsAudioProcessor)
 };

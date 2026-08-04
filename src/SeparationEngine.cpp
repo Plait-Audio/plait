@@ -2,283 +2,275 @@
 
 #include <BinaryData.h>
 
-#include <sstream>
-#include <algorithm>
+#include <cmath>
 
 // --------------------------------------------------------------------------
 // Construction / model loading
 // --------------------------------------------------------------------------
 
-SeparationEngine::SeparationEngine()
-    : utils_(4096)   // n_fft=4096, winLength=4096, hopLength=1024
+Ort::Env SeparationEngine::makeEnv()
 {
-    // Tune LibTorch threading for Apple Silicon:
-    // 4 intra-op threads = M1 Air's performance core count.
-    // 2 inter-op threads = allows 2 models to run concurrently.
-    at::set_num_threads(4);
-    at::set_num_interop_threads(2);
-
-    loadModels();
+    // One shared (global) thread pool for every session and every plugin
+    // instance, instead of each of the 5 sessions spawning its own.
+    Ort::ThreadingOptions threading;
+    threading.SetGlobalIntraOpNumThreads (4);   // M-series performance cores
+    threading.SetGlobalInterOpNumThreads (1);
+    return Ort::Env (threading, ORT_LOGGING_LEVEL_WARNING, "ISODrums");
 }
 
-static torch::jit::Module loadFromBinaryData(const char* data, int size)
+SeparationEngine::SeparationEngine()
+    : utils_ (4096),                                    // n_fft=4096, win=4096, hop=1024
+      env_   (makeEnv())
 {
-    std::stringstream ss;
-    ss.write(data, size);
-    return torch::jit::load(ss);
+    sessionOptions_.DisablePerSessionThreads();         // use the env's global pool
+    sessionOptions_.SetGraphOptimizationLevel (GraphOptimizationLevel::ORT_ENABLE_ALL);
+    loadModels();
 }
 
 void SeparationEngine::loadModels()
 {
+    struct Blob { const void* data; int size; };
+
+    // Order matches SeparationResult: kick, snare, toms, hihat, cymbals.
+    const Blob blobs[kNumStems] = {
+        { BinaryData::kick_onnx,    BinaryData::kick_onnxSize    },
+        { BinaryData::snare_onnx,   BinaryData::snare_onnxSize   },
+        { BinaryData::toms_onnx,    BinaryData::toms_onnxSize    },
+        { BinaryData::hihat_onnx,   BinaryData::hihat_onnxSize   },
+        { BinaryData::cymbals_onnx, BinaryData::cymbals_onnxSize },
+    };
+
     try
     {
-        kickModel_    = loadFromBinaryData(BinaryData::my_scripted_module_kick_pt,
-                                           BinaryData::my_scripted_module_kick_ptSize);
-        snareModel_   = loadFromBinaryData(BinaryData::my_scripted_module_snare_pt,
-                                           BinaryData::my_scripted_module_snare_ptSize);
-        tomsModel_    = loadFromBinaryData(BinaryData::my_scripted_module_toms_pt,
-                                           BinaryData::my_scripted_module_toms_ptSize);
-        hihatModel_   = loadFromBinaryData(BinaryData::my_scripted_module_hihat_pt,
-                                           BinaryData::my_scripted_module_hihat_ptSize);
-        cymbalsModel_ = loadFromBinaryData(BinaryData::my_scripted_module_cymbals_pt,
-                                           BinaryData::my_scripted_module_cymbals_ptSize);
+        sessions_.clear();
+        for (const auto& b : blobs)
+        {
+            auto s = std::make_unique<Ort::Session> (
+                env_, b.data, static_cast<size_t> (b.size), sessionOptions_);
 
-        kickModel_.eval();
-        snareModel_.eval();
-        tomsModel_.eval();
-        hihatModel_.eval();
-        cymbalsModel_.eval();
-
+            // Guard against a swapped-in model with a different signature.
+            if (s->GetInputCount() != 1 || s->GetOutputCount() != 1)
+            {
+                DBG ("SeparationEngine: model has unexpected I/O arity");
+                sessions_.clear();
+                modelsLoaded_ = false;
+                return;
+            }
+            sessions_.push_back (std::move (s));
+        }
         modelsLoaded_ = true;
     }
-    catch (const c10::Error& e)
+    catch (const std::exception& e)   // Ort::Exception, bad_alloc, ... all derive from this
     {
-        DBG("SeparationEngine: failed to load models: " + juce::String(e.what()));
+        DBG ("SeparationEngine: failed to load ONNX models: " + juce::String (e.what()));
+        sessions_.clear();
         modelsLoaded_ = false;
     }
 }
 
 // --------------------------------------------------------------------------
-// Inference
+// Per-stem inference: tile over time, run the U-Net, rebuild masked magnitude
 // --------------------------------------------------------------------------
 
-SeparationResult SeparationEngine::separate(const juce::AudioBuffer<float>& input,
+bool SeparationEngine::runStem (Ort::Session& session,
+                                const std::array<std::vector<float>, 2>& mag,
+                                int F, int T,
+                                float maskExponent,
+                                std::array<std::vector<float>, 2>& maskedMagOut,
+                                const std::function<bool()>& shouldCancel) const
+{
+    const int    nTiles   = (T + kTile - 1) / kTile;
+    const size_t tileVals = static_cast<size_t> (2) * kFreqCore * kTile;   // [1,2,2048,512]
+    const bool   doPow    = std::abs (maskExponent - 1.0f) > 1.0e-4f;
+
+    for (int c = 0; c < 2; ++c)
+        maskedMagOut[(size_t) c].assign (static_cast<size_t> (F) * static_cast<size_t> (T), 0.0f);
+
+    std::vector<float> inBuf (tileVals);
+
+    auto memInfo = Ort::MemoryInfo::CreateCpu (OrtArenaAllocator, OrtMemTypeDefault);
+    const std::array<int64_t, 4> inShape { 1, 2, kFreqCore, kTile };
+    const char* inNames[]  = { "mag" };
+    const char* outNames[] = { "mask" };
+
+    for (int k = 0; k < nTiles; ++k)
+    {
+        if (shouldCancel && shouldCancel())
+            return false;
+
+        const int t0 = k * kTile;
+
+        // ---- pack the tile: trim freq to kFreqCore, zero-pad time past T ----
+        for (int c = 0; c < 2; ++c)
+        {
+            const float* magC = mag[(size_t) c].data();
+            for (int f = 0; f < kFreqCore; ++f)
+            {
+                float* dst = &inBuf[static_cast<size_t> (c * kFreqCore + f) * kTile];
+                const float* srcRow = magC + static_cast<size_t> (f) * T;
+                for (int tt = 0; tt < kTile; ++tt)
+                {
+                    const int t = t0 + tt;
+                    dst[tt] = (t < T) ? srcRow[t] : 0.0f;
+                }
+            }
+        }
+
+        // ---- run ----
+        Ort::Value inTensor = Ort::Value::CreateTensor<float> (
+            memInfo, inBuf.data(), inBuf.size(), inShape.data(), inShape.size());
+
+        auto outs = session.Run (Ort::RunOptions { nullptr },
+                                 inNames, &inTensor, 1, outNames, 1);
+        const float* outMask = outs.front().GetTensorData<float>();
+
+        // ---- masked magnitude = mask * input (Nyquist bin left at 0), optional pow ----
+        for (int c = 0; c < 2; ++c)
+        {
+            const float* magC = mag[(size_t) c].data();
+            float*       dstC = maskedMagOut[(size_t) c].data();
+            for (int f = 0; f < kFreqCore; ++f)
+            {
+                const float* maskRow = outMask + static_cast<size_t> (c * kFreqCore + f) * kTile;
+                const float* srcRow  = magC + static_cast<size_t> (f) * T;
+                float*       outRow  = dstC + static_cast<size_t> (f) * T;
+                for (int tt = 0; tt < kTile; ++tt)
+                {
+                    const int t = t0 + tt;
+                    if (t >= T) break;
+                    float v = maskRow[tt] * srcRow[t];
+                    if (v < 0.0f) v = 0.0f;                 // masks are >=0; guard pow anyway
+                    if (doPow)    v = std::pow (v, maskExponent);
+                    outRow[t] = v;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+// --------------------------------------------------------------------------
+// Full separation
+// --------------------------------------------------------------------------
+
+SeparationResult SeparationEngine::separate (const juce::AudioBuffer<float>& input,
                                              double sampleRate,
                                              std::atomic<float>* progress,
-                                             float maskExponent) const
+                                             float maskExponent,
+                                             const std::function<bool()>& shouldCancel) const
 {
-    auto setProgress = [&](float v) { if (progress) progress->store(v); };
-    setProgress(0.0f);
+    auto setProgress = [&] (float v) { if (progress) progress->store (v); };
+    setProgress (0.0f);
 
     SeparationResult result;
     result.sampleRate = sampleRate;
 
-    if (!modelsLoaded_)
+    if (! modelsLoaded_)
         return result;
 
-    // ---- 0. Resample to 44100 if needed (LarsNet expectation) ----
-    const bool needsResample = std::abs(sampleRate - kModelSampleRate) > 1.0;
-    juce::AudioBuffer<float> resampledBuf;
-    if (needsResample)
-        resampledBuf = resample(input, sampleRate, kModelSampleRate);
-    const juce::AudioBuffer<float>& workBuffer = needsResample ? resampledBuf : input;
-
-    // ---- 1. AudioBuffer -> stereo tensor [2, numSamples] ----
-    const int numSamples = workBuffer.getNumSamples();
-
-    if (numSamples < utils_.getNfft())
+    // Nothing below is allowed to throw into the (uncaught) worker thread.
+    try
     {
-        DBG("SeparationEngine: input too short (" + juce::String(numSamples)
-            + " samples, need at least " + juce::String(utils_.getNfft()) + ")");
-        return result;
-    }
+        // ---- 0. Resample to 44100 if needed ----
+        const bool needsResample = std::abs (sampleRate - kModelSampleRate) > 1.0;
+        juce::AudioBuffer<float> resampledBuf;
+        if (needsResample)
+            resampledBuf = resample (input, sampleRate, kModelSampleRate);
+        const juce::AudioBuffer<float>& workBuffer = needsResample ? resampledBuf : input;
 
-    torch::Tensor fileTensor = bufferToTensor(workBuffer);
+        const int numSamples = workBuffer.getNumSamples();
+        const int channels   = workBuffer.getNumChannels();
 
-    // ---- 2. STFT: magnitude + phase [2, F, T] ----
-    torch::Tensor phase;
-    torch::Tensor mag = utils_.batchStft(fileTensor, phase);
+        if (channels < 1 || numSamples < utils_.getNfft())
+            return result;                                  // too short / no audio
 
-    // Release raw audio tensor -- no longer needed after STFT
-    fileTensor.reset();
+        // Duration guard: bound memory + avoid int index overflow. ~30 min @ 44.1k.
+        if (static_cast<int64_t> (numSamples) > static_cast<int64_t> (kModelSampleRate) * 60 * 30)
+            return result;
 
-    setProgress(0.10f);  // 10%: STFT complete
-
-    // ---- 3. Add batch dim -> [1, 2, F, T] ----
-    torch::Tensor modelInput = torch::unsqueeze(mag, 0);
-    mag.reset();  // release magnitude -- modelInput holds the only reference we need
-
-    // Shared input for all 5 models (read-only, safe to share across threads)
-    std::vector<torch::jit::IValue> iValues = { modelInput };
-
-    auto& eng = const_cast<SeparationEngine&>(*this);
-
-    // ---- 4. Parallel model inference (2 concurrent) + interleaved ISTFT ----
-    // Each stem task: forward -> ISTFT -> tensorToBuffer, then release tensors.
-    // A mutex-based semaphore limits concurrency to 2 to cap peak memory.
-
-    struct StemJob {
-        torch::jit::Module* model;
-        juce::AudioBuffer<float>* outputBuf;
-    };
-
-    StemJob jobs[5] = {
-        { &eng.kickModel_,    &result.kick    },
-        { &eng.snareModel_,   &result.snare   },
-        { &eng.tomsModel_,    &result.toms    },
-        { &eng.hihatModel_,   &result.hihat   },
-        { &eng.cymbalsModel_, &result.cymbals },
-    };
-
-    // Simple counting semaphore (C++17 compatible; std::counting_semaphore is C++20)
-    std::mutex semMutex;
-    std::condition_variable semCv;
-    int semCount = 2;
-
-    auto semAcquire = [&]() {
-        std::unique_lock<std::mutex> lk(semMutex);
-        semCv.wait(lk, [&] { return semCount > 0; });
-        --semCount;
-    };
-    auto semRelease = [&]() {
-        std::lock_guard<std::mutex> lk(semMutex);
-        ++semCount;
-        semCv.notify_one();
-    };
-
-    std::atomic<int> completedModels { 0 };
-
-    auto processOneStem = [&](StemJob& job) {
-        semAcquire();
-
-        // Forward pass
-        torch::Tensor mask;
+        // ---- 1. STFT both channels: magnitude + phase, per channel [F, T] ----
+        const int F = utils_.numFreqBins();
+        std::array<std::vector<float>, 2> magCh, phaseCh;
+        int T = 0;
+        for (int c = 0; c < 2; ++c)
         {
-            c10::InferenceMode guard(true);
-            mask = torch::squeeze(job.model->forward(iValues).toTensor(), 0);
+            const float* src = workBuffer.getReadPointer (juce::jmin (c, channels - 1));
+            const auto padded = utils_.padStftInput (src, numSamples);
+            T = utils_.stft (padded.data(), (int) padded.size(), magCh[(size_t) c], phaseCh[(size_t) c]);
         }
 
-        // Apply mask exponent for isolation control:
-        //   >1.0 sharpens (more isolation, more artifacts)
-        //   <1.0 softens  (less isolation, fewer artifacts)
-        if (std::abs(maskExponent - 1.0f) > 0.001f)
-            mask = mask.pow(maskExponent);
+        setProgress (0.10f);
+        if (shouldCancel && shouldCancel())
+            return result;
 
-        // ISTFT immediately (while tensor is still hot in cache)
-        torch::Tensor waveform = utils_.batchIstft(mask, phase, numSamples);
-        mask.reset();
+        // ---- 2. Per-stem inference + ISTFT ----
+        juce::AudioBuffer<float>* outBuffers[kNumStems] = {
+            &result.kick, &result.snare, &result.toms, &result.hihat, &result.cymbals
+        };
 
-        *job.outputBuf = tensorToBuffer(waveform, numSamples);
-        waveform.reset();
+        for (int s = 0; s < kNumStems; ++s)
+        {
+            std::array<std::vector<float>, 2> maskedMag;
+            if (! runStem (*sessions_[(size_t) s], magCh, F, T, maskExponent, maskedMag, shouldCancel))
+                return result;                              // cancelled mid-way
 
-        semRelease();
+            juce::AudioBuffer<float> stemBuf (2, numSamples);
+            std::vector<float> wav;
+            for (int c = 0; c < 2; ++c)
+            {
+                utils_.istft (maskedMag[(size_t) c].data(), phaseCh[(size_t) c].data(),
+                              T, numSamples, wav);
+                stemBuf.copyFrom (c, 0, wav.data(), numSamples);
+            }
 
-        int done = completedModels.fetch_add(1) + 1;
-        setProgress(0.10f + 0.14f * static_cast<float>(done));  // 10% + 14% per model
-    };
+            *outBuffers[s] = needsResample ? resample (stemBuf, kModelSampleRate, sampleRate)
+                                           : std::move (stemBuf);
 
-    // Launch 5 async tasks — the semaphore ensures at most 2 run concurrently
-    std::future<void> futures[5];
-    for (int i = 0; i < 5; ++i)
-        futures[i] = std::async(std::launch::async, processOneStem, std::ref(jobs[i]));
+            setProgress (0.10f + 0.16f * static_cast<float> (s + 1));   // -> ~0.90 after 5 stems
+        }
 
-    // Wait for all to complete
-    for (auto& f : futures)
-        f.get();
-
-    // Release shared model input
-    modelInput.reset();
-    iValues.clear();
-
-    setProgress(0.85f);  // 85%: all models + ISTFTs done
-
-    // ---- 5. Resample stems back to original sample rate if needed ----
-    if (needsResample)
+        setProgress (0.90f);
+    }
+    catch (const std::exception& e)
     {
-        result.kick    = resample(result.kick,    kModelSampleRate, sampleRate);
-        result.snare   = resample(result.snare,   kModelSampleRate, sampleRate);
-        result.toms    = resample(result.toms,    kModelSampleRate, sampleRate);
-        result.hihat   = resample(result.hihat,   kModelSampleRate, sampleRate);
-        result.cymbals = resample(result.cymbals, kModelSampleRate, sampleRate);
+        // ORT failure or allocation failure: never propagate into the host.
+        DBG ("SeparationEngine::separate failed: " + juce::String (e.what()));
+        return SeparationResult { {}, {}, {}, {}, {}, sampleRate };
     }
 
-    setProgress(0.90f);  // 90%: resampling done (onset detection follows in caller)
     return result;
 }
 
 // --------------------------------------------------------------------------
-// Tensor <-> AudioBuffer helpers
+// Resampling
 // --------------------------------------------------------------------------
 
-torch::Tensor SeparationEngine::bufferToTensor(const juce::AudioBuffer<float>& buf)
-{
-    const int channels   = buf.getNumChannels();
-    const int numSamples = buf.getNumSamples();
-
-    auto opts = torch::TensorOptions().dtype(torch::kFloat32);
-
-    // Handle mono by duplicating to stereo
-    if (channels == 1)
-    {
-        torch::Tensor ch = torch::from_blob(
-            const_cast<float*>(buf.getReadPointer(0)),
-            { 1, numSamples }, opts).clone();
-        return torch::cat({ ch, ch }, 0);    // [2, numSamples]
-    }
-
-    torch::Tensor ch0 = torch::from_blob(
-        const_cast<float*>(buf.getReadPointer(0)),
-        { 1, numSamples }, opts).clone();
-    torch::Tensor ch1 = torch::from_blob(
-        const_cast<float*>(buf.getReadPointer(1)),
-        { 1, numSamples }, opts).clone();
-
-    return torch::cat({ ch0, ch1 }, 0);      // [2, numSamples]
-}
-
-juce::AudioBuffer<float> SeparationEngine::tensorToBuffer(const torch::Tensor& t, int numSamples)
-{
-    // t is [2, samples] (or possibly [2, samples'] if ISTFT rounded up)
-    torch::Tensor tc = t.contiguous();
-
-    auto splitResult = torch::split(tc, 1, 0);   // each is [1, samples]
-    torch::Tensor L  = splitResult[0].contiguous();
-    torch::Tensor R  = splitResult[1].contiguous();
-
-    const float* ptrL = L.data_ptr<float>();
-    const float* ptrR = R.data_ptr<float>();
-
-    // clamp to original length in case ISTFT added extra samples
-    const int outSamples = std::min(numSamples, static_cast<int>(L.numel()));
-
-    juce::AudioBuffer<float> buffer(2, outSamples);
-    buffer.copyFrom(0, 0, ptrL, outSamples);
-    buffer.copyFrom(1, 0, ptrR, outSamples);
-
-    return buffer;
-}
-
-juce::AudioBuffer<float> SeparationEngine::resample(const juce::AudioBuffer<float>& buf,
+juce::AudioBuffer<float> SeparationEngine::resample (const juce::AudioBuffer<float>& buf,
                                                      double srcRate, double dstRate)
 {
-    if (std::abs(srcRate - dstRate) < 1.0)
+    if (std::abs (srcRate - dstRate) < 1.0)
         return buf;
 
-    const double ratio = dstRate / srcRate;
-    const int srcSamples = buf.getNumSamples();
-    const int dstSamples = static_cast<int>(std::ceil(srcSamples * ratio));
-    const int channels   = buf.getNumChannels();
+    const double ratio      = dstRate / srcRate;
+    const int    srcSamples = buf.getNumSamples();
+    const int    dstSamples = static_cast<int> (std::ceil (srcSamples * ratio));
+    const int    channels   = buf.getNumChannels();
 
-    juce::AudioBuffer<float> out(channels, dstSamples);
+    juce::AudioBuffer<float> out (channels, dstSamples);
 
     for (int ch = 0; ch < channels; ++ch)
     {
         juce::LagrangeInterpolator interp;
         interp.reset();
-        interp.process(1.0 / ratio,
-                       buf.getReadPointer(ch),
-                       out.getWritePointer(ch),
-                       dstSamples);
+        // Bounds-aware overload: it will zero-pad rather than read past the end
+        // of the source when it runs out of input samples.
+        interp.process (1.0 / ratio,
+                        buf.getReadPointer (ch),
+                        out.getWritePointer (ch),
+                        dstSamples,
+                        srcSamples,
+                        /*wrapAround=*/ 0);
     }
 
     return out;
