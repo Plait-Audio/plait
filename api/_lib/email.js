@@ -66,13 +66,13 @@ export async function sendLicenseEmail({ to, licenseKey, orderId }) {
       <div style="font-size:13px; font-weight:600; color:${A.text}; letter-spacing:0.4px; text-transform:uppercase; margin:0 0 14px;">How to activate</div>
 
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%; margin:0 0 6px;">
-        ${step(1, `Open <strong style="color:${A.text};">ISO Drums</strong> (<a href="https://plaitaudio.com/iso-drums#download" style="color:${A.gold}; text-decoration:none;">download here</a> if you haven't yet).`)}
+        ${step(1, `Open <strong style="color:${A.text};">ISO Drums</strong> (<a href="https://www.plaitaudio.com/#download" style="color:${A.gold}; text-decoration:none;">download here</a> if you haven't yet).`)}
         ${step(2, `Click the <strong style="color:${A.text};">gear icon → License…</strong> in the top-right.`)}
         ${step(3, `Paste your key and hit <strong style="color:${A.text};">Activate</strong>.`)}
       </table>
 
       <div style="text-align:center; margin:28px 0 6px;">
-        <a href="https://plaitaudio.com/iso-drums#download" style="display:inline-block; background:${A.gold}; color:#000; text-decoration:none; font-weight:600; font-size:14px; padding:12px 26px; border-radius:9px;">Download ISO&nbsp;Drums</a>
+        <a href="https://www.plaitaudio.com/#download" style="display:inline-block; background:${A.gold}; color:#000; text-decoration:none; font-weight:600; font-size:14px; padding:12px 26px; border-radius:9px;">Download ISO&nbsp;Drums</a>
       </div>
 
       <p style="font-size:13px; color:${A.muted}; line-height:1.6; margin:20px 0 0; text-align:center;">
@@ -98,7 +98,7 @@ export async function sendLicenseEmail({ to, licenseKey, orderId }) {
       `License key: ${licenseKey}`,
       '',
       'How to activate:',
-      '1. Open ISO Drums (download: https://plaitaudio.com/iso-drums#download).',
+      '1. Open ISO Drums (download: https://www.plaitaudio.com/#download).',
       '2. Click the gear icon -> "License..." in the top-right.',
       '3. Paste your key and click Activate.',
       '',
