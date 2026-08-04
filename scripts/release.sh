@@ -132,7 +132,7 @@ fi
 cat > "${NOTES_FILE}" << NOTES
 ## ISO Drums ${TAG}
 
-macOS 11+ · Apple Silicon (M1–M4) — Standalone App, AU & VST3
+macOS 11+ · Apple Silicon (M1 or later) — Standalone App, AU & VST3
 
 ${WHATS_NEW}
 
