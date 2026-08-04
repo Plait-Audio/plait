@@ -12,7 +12,7 @@ if (NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS deployment version")
 endif ()
 
-project(ISODrums VERSION 0.3.0)
+project(ISODrums VERSION 0.3.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
