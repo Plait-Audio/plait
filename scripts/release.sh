@@ -151,7 +151,7 @@ gh release create "${TAG}" \
 rm -f "${NOTES_FILE}"
 
 # Get the published asset URL
-DOWNLOAD_URL=$(gh release view "${TAG}" --json assets -q '.assets[] | select(.name | test("'"${DMG_NAME}"'")) | .browserDownloadUrl')
+DOWNLOAD_URL=$(gh release view "${TAG}" --json assets -q '.assets[] | select(.name == "'"${DMG_NAME}"'") | .url')
 
 if [[ -z "${DOWNLOAD_URL}" ]]; then
   echo "Error: Could not retrieve download URL from GitHub Release."
