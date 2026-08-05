@@ -86,26 +86,11 @@ else
   echo "▸ CODESIGN_IDENTITY not set — skipping signing (ad-hoc only)"
 fi
 
-# ── Create DMG ────────────────────────────────────────────────────────────────
-echo "▸ Creating DMG..."
-rm -f "${DMG_PATH}"
-
-# Create a temporary DMG with a nice layout
-TEMP_DMG="${ROOT_DIR}/dist/_temp_${DIST_NAME}.dmg"
-DMG_VOLUME="ISO Drums ${VERSION}"
-
-hdiutil create -volname "${DMG_VOLUME}" \
-  -srcfolder "${DIST_DIR}" \
-  -ov -format UDRW "${TEMP_DMG}"
-
-# Mount, add Applications symlink, unmount
-MOUNT_DIR=$(hdiutil attach -readwrite -noverify "${TEMP_DMG}" | tail -1 | cut -f3-)
-ln -sf /Applications "${MOUNT_DIR}/Applications"
-hdiutil detach "${MOUNT_DIR}" -quiet
-
-# Convert to compressed read-only DMG
-hdiutil convert "${TEMP_DMG}" -format UDZO -imagekey zlib-level=9 -o "${DMG_PATH}"
-rm -f "${TEMP_DMG}"
+# ── Create branded DMG ──────────────────────────────────────────────────────────
+# Styled installer window (background art, icon layout, Applications drop-link)
+# built deterministically via dmgbuild — see scripts/make_dmg.sh.
+echo "▸ Creating branded DMG..."
+bash "${ROOT_DIR}/scripts/make_dmg.sh" "${DIST_DIR}" "${VERSION}" "${DMG_PATH}"
 
 echo "  ✓ DMG: dist/${DIST_NAME}.dmg"
 
